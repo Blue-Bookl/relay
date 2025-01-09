@@ -36,8 +36,10 @@ const nullthrows = require('nullthrows');
 const {
   cannotReadPropertyOfUndefined__DEPRECATED,
   disallowWarnings,
+  injectPromisePolyfill__DEPRECATED,
 } = require('relay-test-utils-internal');
 
+injectPromisePolyfill__DEPRECATED();
 disallowWarnings();
 
 describe('execute() a query with nested @match', () => {
@@ -225,7 +227,6 @@ describe('execute() a query with nested @match', () => {
           },
 
           __fragmentOwner: operation.request,
-          __isWithinUnmatchedTypeRefinement: false,
           __module_component: 'MarkdownUserNameRenderer.react',
         },
       },
@@ -329,7 +330,6 @@ describe('execute() a query with nested @match', () => {
       user: {
         innerRenderer: {
           __fragmentOwner: operation.request,
-          __isWithinUnmatchedTypeRefinement: false,
           __fragmentPropName: 'name',
 
           __fragments: {

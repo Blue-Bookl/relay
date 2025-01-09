@@ -18,6 +18,7 @@ import type {
   OperationDescriptor,
   RecordSource,
   RequestDescriptor,
+  ResolverContext,
   Snapshot,
   StoreSubscriptions,
 } from './RelayStoreTypes';
@@ -41,11 +42,17 @@ class RelayStoreSubscriptions implements StoreSubscriptions {
   _subscriptions: Set<Subscription>;
   __log: ?LogFunction;
   _resolverCache: ResolverCache;
+  _resolverContext: ?ResolverContext;
 
-  constructor(log?: ?LogFunction, resolverCache: ResolverCache) {
+  constructor(
+    log?: ?LogFunction,
+    resolverCache: ResolverCache,
+    resolverContext?: ResolverContext,
+  ) {
     this._subscriptions = new Set();
     this.__log = log;
     this._resolverCache = resolverCache;
+    this._resolverContext = resolverContext;
   }
 
   subscribe(
@@ -83,6 +90,7 @@ class RelayStoreSubscriptions implements StoreSubscriptions {
         source,
         snapshot.selector,
         this._resolverCache,
+        this._resolverContext,
       );
       const nextData = recycleNodesInto(snapshot.data, backup.data);
       (backup: $FlowFixMe).data = nextData; // backup owns the snapshot and can safely mutate
@@ -107,8 +115,7 @@ class RelayStoreSubscriptions implements StoreSubscriptions {
           missingLiveResolverFields: backup.missingLiveResolverFields,
           seenRecords: backup.seenRecords,
           selector: backup.selector,
-          missingRequiredFields: backup.missingRequiredFields,
-          relayResolverErrors: backup.relayResolverErrors,
+          fieldErrors: backup.fieldErrors,
         };
       } else {
         // This subscription was created during the optimisitic state. We should
@@ -163,7 +170,12 @@ class RelayStoreSubscriptions implements StoreSubscriptions {
     }
     let nextSnapshot: Snapshot =
       hasOverlappingUpdates || !backup
-        ? RelayReader.read(source, snapshot.selector, this._resolverCache)
+        ? RelayReader.read(
+            source,
+            snapshot.selector,
+            this._resolverCache,
+            this._resolverContext,
+          )
         : backup;
     const nextData = recycleNodesInto(snapshot.data, nextSnapshot.data);
     nextSnapshot = ({
@@ -173,8 +185,7 @@ class RelayStoreSubscriptions implements StoreSubscriptions {
       missingLiveResolverFields: nextSnapshot.missingLiveResolverFields,
       seenRecords: nextSnapshot.seenRecords,
       selector: nextSnapshot.selector,
-      missingRequiredFields: nextSnapshot.missingRequiredFields,
-      relayResolverErrors: nextSnapshot.relayResolverErrors,
+      fieldErrors: nextSnapshot.fieldErrors,
     }: Snapshot);
     if (__DEV__) {
       deepFreeze(nextSnapshot);
@@ -203,6 +214,10 @@ class RelayStoreSubscriptions implements StoreSubscriptions {
       // With loose attribution enabled, we'll attribute this anyway.
       return snapshot.selector.owner;
     }
+  }
+
+  size(): number {
+    return this._subscriptions.size;
   }
 }
 

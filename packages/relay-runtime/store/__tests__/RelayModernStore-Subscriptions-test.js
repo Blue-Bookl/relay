@@ -54,6 +54,7 @@ function assertIsDeeplyFrozen(value: ?{...} | ?$ReadOnlyArray<{...}>): void {
     value.forEach(item => assertIsDeeplyFrozen(item));
   } else if (typeof value === 'object' && value !== null) {
     for (const key in value) {
+      // $FlowFixMe[invalid-computed-prop]
       assertIsDeeplyFrozen(value[key]);
     }
   }
@@ -63,6 +64,7 @@ function cloneEventWithSets(event: LogEvent) {
   const nextEvent = {};
   for (const key in event) {
     if (event.hasOwnProperty(key)) {
+      // $FlowFixMe[invalid-computed-prop]
       const val = event[key];
       if (val instanceof Set) {
         // $FlowFixMe[prop-missing]
@@ -367,9 +369,9 @@ function cloneEventWithSets(event: LogEvent) {
         expect(callback.mock.calls.length).toBe(1);
         expect(callback.mock.calls[0][0]).toEqual({
           ...snapshot,
-          missingRequiredFields: null,
           missingLiveResolverFields: [],
           isMissingData: false,
+          fieldErrors: null,
           data: {
             name: 'Zuck',
             profilePicture: {
@@ -411,9 +413,20 @@ function cloneEventWithSets(event: LogEvent) {
             name: 'Joe',
             profilePicture: undefined,
           },
-          missingRequiredFields: null,
           missingLiveResolverFields: [],
           isMissingData: true,
+          fieldErrors: [
+            {
+              fieldPath: 'profilePicture',
+              kind: 'missing_expected_data.log',
+              owner: 'RelayModernStoreSubscriptionsTest1Fragment',
+            },
+            {
+              fieldPath: 'emailAddresses',
+              kind: 'missing_expected_data.log',
+              owner: 'RelayModernStoreSubscriptionsTest1Fragment',
+            },
+          ],
           seenRecords: new Set(Object.keys(nextSource.toJSON())),
         });
       });
@@ -451,7 +464,18 @@ function cloneEventWithSets(event: LogEvent) {
             name: 'Joe',
             profilePicture: undefined,
           },
-          missingRequiredFields: null,
+          fieldErrors: [
+            {
+              fieldPath: 'profilePicture',
+              kind: 'missing_expected_data.log',
+              owner: 'RelayModernStoreSubscriptionsTest1Fragment',
+            },
+            {
+              fieldPath: 'emailAddresses',
+              kind: 'missing_expected_data.log',
+              owner: 'RelayModernStoreSubscriptionsTest1Fragment',
+            },
+          ],
           missingLiveResolverFields: [],
           isMissingData: true,
           seenRecords: new Set(['842472']),
@@ -675,6 +699,11 @@ function cloneEventWithSets(event: LogEvent) {
           owner.request,
         );
         const snapshot = store.lookup(selector);
+        expect(logEvents).toMatchObject([
+          {name: 'store.lookup.start'},
+          {name: 'store.lookup.end'},
+        ]);
+        logEvents.length = 0;
         const callback = jest.fn((nextSnapshot: Snapshot) => {
           logEvents.push({
             kind: 'test_only_callback',
@@ -699,6 +728,7 @@ function cloneEventWithSets(event: LogEvent) {
         expect(logEvents).toEqual([
           {
             name: 'store.notify.start',
+            sourceOperation: undefined,
           },
           // callbacks occur after notify.start...
           {
@@ -715,6 +745,8 @@ function cloneEventWithSets(event: LogEvent) {
             name: 'store.notify.complete',
             updatedRecordIDs: new Set(['client:1']),
             invalidatedRecordIDs: new Set(),
+            updatedOwners: [owner.request],
+            subscriptionsSize: 1,
           },
         ]);
         expect(callback).toBeCalledTimes(1);
@@ -738,6 +770,11 @@ function cloneEventWithSets(event: LogEvent) {
             owner.request,
           );
           const snapshot = store.lookup(selector);
+          expect(logEvents).toMatchObject([
+            {name: 'store.lookup.start'},
+            {name: 'store.lookup.end'},
+          ]);
+          logEvents.length = 0;
           const callback = jest.fn((nextSnapshot: Snapshot) => {
             logEvents.push({
               kind: 'test_only_callback',
@@ -800,6 +837,8 @@ function cloneEventWithSets(event: LogEvent) {
               sourceOperation: owner,
               updatedRecordIDs: new Set(['client:1']),
               invalidatedRecordIDs: new Set(),
+              updatedOwners: [owner.request],
+              subscriptionsSize: 1,
             },
           ]);
           expect(callback).toBeCalledTimes(1);

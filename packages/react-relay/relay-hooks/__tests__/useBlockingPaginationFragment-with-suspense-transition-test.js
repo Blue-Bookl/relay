@@ -13,7 +13,7 @@
 import type {Direction, OperationDescriptor, Variables} from 'relay-runtime';
 import type {Disposable} from 'relay-runtime/util/RelayRuntimeTypes';
 
-const useBlockingPaginationFragmentOriginal = require('../useBlockingPaginationFragment');
+const useBlockingPaginationFragmentOriginal = require('../legacy/useBlockingPaginationFragment');
 const invariant = require('invariant');
 const React = require('react');
 const ReactRelayContext = require('react-relay/ReactRelayContext');
@@ -62,10 +62,10 @@ describe('useBlockingPaginationFragment with useTransition', () => {
         this.setState({error});
       }
       render(): any | React.Node {
-        const {children, fallback} = this.props;
+        const {children, fallback: Fallback} = this.props;
         const {error} = this.state;
         if (error) {
-          return React.createElement(fallback, {error});
+          return <Fallback error={error} />;
         }
         return children;
       }
@@ -186,7 +186,6 @@ describe('useBlockingPaginationFragment with useTransition', () => {
             {},
         },
         [FRAGMENT_OWNER_KEY]: owner.request,
-        __isWithinUnmatchedTypeRefinement: false,
       };
     }
 

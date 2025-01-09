@@ -10,14 +10,21 @@ use std::fmt;
 use intern::string_key::Intern;
 use intern::string_key::StringKey;
 use intern::Lookup;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+/// Represents the name of a project in the Relay configuration.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, JsonSchema, Ord, PartialOrd)]
+#[schemars(untagged)]
 pub enum ProjectName {
+    /// No project name is specified.
     Default,
+    /// A project name.
+    ///
+    /// This should match one the keys in the `projects` map in the Relay compiler config.
     Named(StringKey),
 }
 
@@ -27,9 +34,7 @@ impl ProjectName {
         object_name: StringKey,
         field_name: StringKey,
     ) -> String {
-        match self {
-            _ => format!("{}__{}", object_name, field_name),
-        }
+        format!("{}__{}", object_name, field_name)
     }
 }
 
@@ -68,10 +73,7 @@ impl From<ProjectName> for StringKey {
 }
 
 impl Serialize for ProjectName {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(match self {
             ProjectName::Default => "default",
             ProjectName::Named(name) => name.lookup(),

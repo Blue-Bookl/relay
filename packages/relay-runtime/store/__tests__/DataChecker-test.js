@@ -257,6 +257,7 @@ describe('check()', () => {
         id: '1',
         __typename: 'User',
         'profilePicture(size:32)': {__ref: 'client:1'},
+        // $FlowFixMe[invalid-computed-prop]
         [handleKey]: {__ref: 'client:3'},
       },
       'client:1': {
@@ -348,6 +349,7 @@ describe('check()', () => {
         id: '1',
         __typename: 'User',
         'profilePicture(size:32)': {__ref: 'client:1'},
+        // $FlowFixMe[invalid-computed-prop]
         [handleKey]: {__ref: 'client:3'},
       },
       'client:1': {
@@ -399,6 +401,7 @@ describe('check()', () => {
         id: '1',
         __typename: 'User',
         'profilePicture(size:32)': {__ref: 'client:1'},
+        // $FlowFixMe[invalid-computed-prop]
         [handleKey]: {__ref: 'client:3'},
       },
       'client:1': {
@@ -517,6 +520,7 @@ describe('check()', () => {
         id: '1',
         __typename: 'User',
         'profilePicture(size:32)': {__ref: 'client:1'},
+        // $FlowFixMe[invalid-computed-prop]
         [handleKey]: {__ref: 'client:3'},
       },
       'client:1': {
@@ -581,6 +585,7 @@ describe('check()', () => {
         __id: 'client:2',
         __typename: 'Photo',
         uri: 'https://...',
+        // $FlowFixMe[invalid-computed-prop]
         [handleKey]: 'https://...',
       },
     };
@@ -719,9 +724,11 @@ describe('check()', () => {
 
       loader = {
         get: jest.fn(
+          // $FlowFixMe[invalid-computed-prop]
           (moduleName: mixed) => nodes[String(moduleName).replace(/\$.*/, '')],
         ),
         load: jest.fn((moduleName: mixed) =>
+          // $FlowFixMe[invalid-computed-prop]
           Promise.resolve(nodes[String(moduleName).replace(/\$.*/, '')]),
         ),
       };
@@ -1169,9 +1176,11 @@ describe('check()', () => {
 
       loader = {
         get: jest.fn(
+          // $FlowFixMe[invalid-computed-prop]
           (moduleName: mixed) => nodes[String(moduleName).replace(/\$.*/, '')],
         ),
         load: jest.fn((moduleName: mixed) =>
+          // $FlowFixMe[invalid-computed-prop]
           Promise.resolve(nodes[String(moduleName).replace(/\$.*/, '')]),
         ),
       };
@@ -1957,22 +1966,22 @@ describe('check()', () => {
           updatedHometown === undefined
             ? {}
             : updatedHometown === null
-            ? {
-                user1: {
-                  __id: 'user1',
-                  __typename: 'User',
-                  hometown: null,
-                },
-              }
-            : {
-                user1: {
-                  __id: 'user1',
-                  __typename: 'User',
-                  hometown: {
-                    __ref: updatedHometown,
+              ? {
+                  user1: {
+                    __id: 'user1',
+                    __typename: 'User',
+                    hometown: null,
+                  },
+                }
+              : {
+                  user1: {
+                    __id: 'user1',
+                    __typename: 'User',
+                    hometown: {
+                      __ref: updatedHometown,
+                    },
                   },
                 },
-              },
         );
       },
     );
@@ -2117,22 +2126,22 @@ describe('check()', () => {
           updatedScreennames === undefined
             ? {}
             : updatedScreennames === null
-            ? {
-                user1: {
-                  __id: 'user1',
-                  __typename: 'User',
-                  screennames: null,
-                },
-              }
-            : {
-                user1: {
-                  __id: 'user1',
-                  __typename: 'User',
-                  screennames: {
-                    __refs: updatedScreennames,
+              ? {
+                  user1: {
+                    __id: 'user1',
+                    __typename: 'User',
+                    screennames: null,
+                  },
+                }
+              : {
+                  user1: {
+                    __id: 'user1',
+                    __typename: 'User',
+                    screennames: {
+                      __refs: updatedScreennames,
+                    },
                   },
                 },
-              },
         );
       },
     );
@@ -2644,6 +2653,7 @@ describe('check()', () => {
           name: 'Alice',
           // no `id` value
         },
+        // $FlowFixMe[invalid-computed-prop]
         [typeID]: {
           __id: typeID,
           __typename: TYPE_SCHEMA_TYPE,
@@ -2699,6 +2709,7 @@ describe('check()', () => {
           name: 'Alice',
           id: '1',
         },
+        // $FlowFixMe[invalid-computed-prop]
         [typeID]: {
           __id: typeID,
           __typename: TYPE_SCHEMA_TYPE,
@@ -2755,6 +2766,7 @@ describe('check()', () => {
           // no 'id' bc not a Node
           name: 'Not a Node!',
         },
+        // $FlowFixMe[invalid-computed-prop]
         [typeID]: {
           __id: typeID,
           __typename: TYPE_SCHEMA_TYPE,
@@ -2858,6 +2870,7 @@ describe('check()', () => {
                 __typename: 'Text',
                 text: 'Hello, Antonio',
               },
+              // $FlowFixMe[invalid-computed-prop]
               [typeID]: {
                 __id: typeID,
                 __typename: TYPE_SCHEMA_TYPE,

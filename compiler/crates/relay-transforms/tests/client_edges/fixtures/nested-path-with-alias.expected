@@ -38,11 +38,12 @@ fragment Foo_user on ClientUser {
   #         ),
   #     ),
   #     unique_id: 1,
+  #     model_resolvers: [],
   # }
    {
     ...BestFriendFragment @__RelayResolverMetadata
     # RelayResolverMetadata {
-    #     field_id: FieldID(517),
+    #     field_id: FieldID(527),
     #     import_path: "BestFriendResolver",
     #     import_name: None,
     #     field_alias: Some(
@@ -53,6 +54,8 @@ fragment Foo_user on ClientUser {
     #     live: false,
     #     output_type_info: EdgeTo,
     #     fragment_data_injection_mode: None,
+    #     type_confirmed: false,
+    #     resolver_type: ResolverModule,
     # }
     
     bff: best_friend {
@@ -64,11 +67,12 @@ fragment Foo_user on ClientUser {
       #         ),
       #     ),
       #     unique_id: 0,
+      #     model_resolvers: [],
       # }
        {
         ...BestFriendFragment @__RelayResolverMetadata
         # RelayResolverMetadata {
-        #     field_id: FieldID(517),
+        #     field_id: FieldID(527),
         #     import_path: "BestFriendResolver",
         #     import_name: None,
         #     field_alias: Some(
@@ -79,6 +83,8 @@ fragment Foo_user on ClientUser {
         #     live: false,
         #     output_type_info: EdgeTo,
         #     fragment_data_injection_mode: None,
+        #     type_confirmed: false,
+        #     resolver_type: ResolverModule,
         # }
         
         bffs_bff: best_friend {

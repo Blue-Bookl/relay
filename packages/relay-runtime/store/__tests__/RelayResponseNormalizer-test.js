@@ -15,6 +15,7 @@ const {
   getActorIdentifier,
 } = require('../../multi-actor-environment/ActorIdentifier');
 const {graphql} = require('../../query/GraphQLTag');
+const RelayFeatureFlags = require('../../util/RelayFeatureFlags');
 const defaultGetDataID = require('../defaultGetDataID');
 const {
   createOperationDescriptor,
@@ -134,12 +135,14 @@ describe('RelayResponseNormalizer', () => {
           __refs: [edgeID1, null, edgeID2],
         },
       },
+      // $FlowFixMe[invalid-computed-prop]
       [edgeID1]: {
         __id: edgeID1,
         __typename: 'FriendsEdge',
         cursor: 'cursor:2',
         node: {__ref: '2'},
       },
+      // $FlowFixMe[invalid-computed-prop]
       [edgeID2]: {
         __id: edgeID2,
         __typename: 'FriendsEdge',
@@ -3703,7 +3706,7 @@ describe('RelayResponseNormalizer', () => {
       );
 
       expect(result).toEqual({
-        errors: null,
+        errors: undefined,
         fieldPayloads: [],
         followupPayloads: [
           {
@@ -3771,7 +3774,7 @@ describe('RelayResponseNormalizer', () => {
         {...defaultOptions, actorIdentifier: getActorIdentifier('actor-1234')},
       );
       expect(result).toEqual({
-        errors: null,
+        errors: undefined,
         fieldPayloads: [],
         followupPayloads: [
           {
@@ -3840,7 +3843,7 @@ describe('RelayResponseNormalizer', () => {
         {...defaultOptions, actorIdentifier: getActorIdentifier('actor-1234')},
       );
       expect(result).toEqual({
-        errors: null,
+        errors: undefined,
         fieldPayloads: [],
         followupPayloads: [
           {
@@ -3922,7 +3925,7 @@ describe('RelayResponseNormalizer', () => {
         },
       );
       expect(result).toEqual({
-        errors: null,
+        errors: undefined,
         fieldPayloads: [],
         followupPayloads: [],
         incrementalPlaceholders: [],
@@ -3966,7 +3969,7 @@ describe('RelayResponseNormalizer', () => {
         },
       );
       expect(result).toEqual({
-        errors: null,
+        errors: undefined,
         fieldPayloads: [],
         followupPayloads: [],
         incrementalPlaceholders: [],
@@ -4029,7 +4032,7 @@ describe('RelayResponseNormalizer', () => {
         {...defaultOptions, actorIdentifier: getActorIdentifier('actor-1234')},
       );
       expect(result).toEqual({
-        errors: null,
+        errors: undefined,
         fieldPayloads: [],
         followupPayloads: [
           {
@@ -4137,6 +4140,493 @@ describe('RelayResponseNormalizer', () => {
           __id: 'client:root',
           __typename: '__Root',
         },
+      });
+    });
+  });
+
+  describe('when field error handling is enabled', () => {
+    it('normalizes queries with multiple field errors', () => {
+      const FooQuery = graphql`
+        query RelayResponseNormalizerTest37Query($id: ID!) {
+          node(id: $id) {
+            id
+            __typename
+            ... on User {
+              firstName
+              lastName
+              friends(first: 3) {
+                edges {
+                  cursor
+                  node {
+                    firstName
+                    lastName
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+      const payload = {
+        node: {
+          id: '1',
+          __typename: 'User',
+          firstName: 'Jerry',
+          lastName: 'Seinfeld',
+          friends: {
+            edges: [
+              {
+                cursor: 'cursor:2',
+                node: {
+                  id: '2',
+                  firstName: 'George',
+                  lastName: 'Costanza',
+                },
+              },
+              {
+                cursor: 'cursor:3',
+                node: {
+                  id: '3',
+                  firstName: null,
+                  lastName: 'Kramer',
+                },
+              },
+              {
+                cursor: 'cursor:4',
+                node: {
+                  id: '4',
+                  firstName: null,
+                  lastName: 'Newman',
+                },
+              },
+            ],
+          },
+        },
+      };
+      const errors = [
+        {
+          message: "No one knows Kramer's first name until season six!",
+          path: ['node', 'friends', 'edges', 1, 'node', 'firstName'],
+        },
+        {
+          message: 'There was another error!',
+          path: ['node', 'friends', 'edges', 1, 'node', 'firstName'],
+        },
+        {
+          message: "No one knows Newman's first name!",
+          path: ['node', 'friends', 'edges', 2, 'node', 'firstName'],
+        },
+      ];
+      const recordSource = new RelayRecordSource();
+      recordSource.set(ROOT_ID, RelayModernRecord.create(ROOT_ID, ROOT_TYPE));
+      normalize(
+        recordSource,
+        createNormalizationSelector(FooQuery.operation, ROOT_ID, {
+          id: '1',
+          size: 32,
+        }),
+        payload,
+        defaultOptions,
+        errors,
+      );
+      const friendsID = 'client:1:friends(first:3)';
+      const edge0ID = `${friendsID}:edges:0`;
+      const edge1ID = `${friendsID}:edges:1`;
+      const edge2ID = `${friendsID}:edges:2`;
+      expect(recordSource.toJSON()).toEqual({
+        '1': {
+          __id: '1',
+          id: '1',
+          __typename: 'User',
+          firstName: 'Jerry',
+          'friends(first:3)': {__ref: friendsID},
+          lastName: 'Seinfeld',
+        },
+        '2': {
+          __id: '2',
+          __typename: 'User',
+          firstName: 'George',
+          id: '2',
+          lastName: 'Costanza',
+        },
+        '3': {
+          __errors: {
+            firstName: [
+              {
+                message: "No one knows Kramer's first name until season six!",
+              },
+              {
+                message: 'There was another error!',
+              },
+            ],
+          },
+          __id: '3',
+          __typename: 'User',
+          firstName: null,
+          id: '3',
+          lastName: 'Kramer',
+        },
+        '4': {
+          __errors: {
+            firstName: [
+              {
+                message: "No one knows Newman's first name!",
+              },
+            ],
+          },
+          __id: '4',
+          __typename: 'User',
+          firstName: null,
+          id: '4',
+          lastName: 'Newman',
+        },
+        [friendsID]: {
+          __id: friendsID,
+          __typename: 'FriendsConnection',
+          edges: {
+            __refs: [edge0ID, edge1ID, edge2ID],
+          },
+        },
+        // $FlowFixMe[invalid-computed-prop]
+        [edge0ID]: {
+          __id: edge0ID,
+          __typename: 'FriendsEdge',
+          cursor: 'cursor:2',
+          node: {__ref: '2'},
+        },
+        // $FlowFixMe[invalid-computed-prop]
+        [edge1ID]: {
+          __id: edge1ID,
+          __typename: 'FriendsEdge',
+          cursor: 'cursor:3',
+          node: {__ref: '3'},
+        },
+        // $FlowFixMe[invalid-computed-prop]
+        [edge2ID]: {
+          __id: edge2ID,
+          __typename: 'FriendsEdge',
+          cursor: 'cursor:4',
+          node: {__ref: '4'},
+        },
+        'client:root': {
+          __id: 'client:root',
+          __typename: '__Root',
+          'node(id:"1")': {__ref: '1'},
+        },
+      });
+    });
+
+    it('normalizes queries with field errors that bubbled up', () => {
+      const FooQuery = graphql`
+        query RelayResponseNormalizerTest38Query($id: ID!) {
+          node(id: $id) {
+            id
+            __typename
+            ... on User {
+              firstName
+              lastName
+              friends(first: 3) {
+                edges {
+                  cursor
+                  node {
+                    firstName
+                    lastName
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+      const payload = {
+        node: {
+          id: '1',
+          __typename: 'User',
+          firstName: 'Jerry',
+          lastName: 'Seinfeld',
+          friends: null,
+        },
+      };
+      const errors = [
+        {
+          message: "No one knows Kramer's first name until season six!",
+          path: ['node', 'friends', 'edges', 1, 'node', 'firstName'],
+        },
+        {
+          message: 'There was another error!',
+          path: ['node', 'friends', 'edges', 1, 'node', 'firstName'],
+        },
+        {
+          message: "No one knows Newman's first name!",
+          path: ['node', 'friends', 'edges', 2, 'node', 'firstName'],
+        },
+      ];
+      const recordSource = new RelayRecordSource();
+      recordSource.set(ROOT_ID, RelayModernRecord.create(ROOT_ID, ROOT_TYPE));
+      normalize(
+        recordSource,
+        createNormalizationSelector(FooQuery.operation, ROOT_ID, {
+          id: '1',
+          size: 32,
+        }),
+        payload,
+        defaultOptions,
+        errors,
+      );
+      expect(recordSource.toJSON()).toEqual({
+        '1': {
+          __id: '1',
+          __typename: 'User',
+          __errors: {
+            'friends(first:3)': [
+              {
+                message: "No one knows Kramer's first name until season six!",
+                path: ['edges', 1, 'node', 'firstName'],
+              },
+              {
+                message: 'There was another error!',
+                path: ['edges', 1, 'node', 'firstName'],
+              },
+              {
+                message: "No one knows Newman's first name!",
+                path: ['edges', 2, 'node', 'firstName'],
+              },
+            ],
+          },
+          firstName: 'Jerry',
+          'friends(first:3)': null,
+          id: '1',
+          lastName: 'Seinfeld',
+        },
+        'client:root': {
+          __id: 'client:root',
+          __typename: '__Root',
+          'node(id:"1")': {__ref: '1'},
+        },
+      });
+    });
+
+    let wasNoncompliantErrorHandlingOnListsEnabled;
+
+    beforeEach(() => {
+      wasNoncompliantErrorHandlingOnListsEnabled =
+        RelayFeatureFlags.ENABLE_NONCOMPLIANT_ERROR_HANDLING_ON_LISTS;
+    });
+
+    afterEach(() => {
+      RelayFeatureFlags.ENABLE_NONCOMPLIANT_ERROR_HANDLING_ON_LISTS =
+        wasNoncompliantErrorHandlingOnListsEnabled;
+    });
+
+    describe('when noncompliant error handling on lists is disabled', () => {
+      beforeEach(() => {
+        RelayFeatureFlags.ENABLE_NONCOMPLIANT_ERROR_HANDLING_ON_LISTS = false;
+      });
+
+      it('ignores field errors on an empty list', () => {
+        const FooQuery = graphql`
+          query RelayResponseNormalizerTest39Query($id: ID!) {
+            node(id: $id) {
+              id
+              __typename
+              ... on User {
+                friends(first: 3) {
+                  edges {
+                    cursor
+                  }
+                }
+              }
+            }
+          }
+        `;
+        const payload = {
+          node: {
+            id: '1',
+            __typename: 'User',
+            friends: {
+              edges: [],
+            },
+          },
+        };
+        const errors = [
+          {
+            message: 'There was an error!',
+            path: ['node', 'friends', 'edges'],
+          },
+        ];
+        const recordSource = new RelayRecordSource();
+        recordSource.set(ROOT_ID, RelayModernRecord.create(ROOT_ID, ROOT_TYPE));
+        normalize(
+          recordSource,
+          createNormalizationSelector(FooQuery.operation, ROOT_ID, {
+            id: '1',
+            size: 32,
+          }),
+          payload,
+          defaultOptions,
+          errors,
+        );
+        expect(recordSource.toJSON()).toEqual({
+          '1': {
+            __id: '1',
+            __typename: 'User',
+            'friends(first:3)': {
+              __ref: 'client:1:friends(first:3)',
+            },
+            id: '1',
+          },
+          'client:1:friends(first:3)': {
+            __id: 'client:1:friends(first:3)',
+            __typename: 'FriendsConnection',
+            edges: {
+              __refs: [],
+            },
+          },
+          'client:root': {
+            __id: 'client:root',
+            __typename: '__Root',
+            'node(id:"1")': {__ref: '1'},
+          },
+        });
+      });
+    });
+
+    describe('when noncompliant error handling on lists is enabled', () => {
+      beforeEach(() => {
+        RelayFeatureFlags.ENABLE_NONCOMPLIANT_ERROR_HANDLING_ON_LISTS = true;
+      });
+
+      it('stores field errors on an linked field that is an empty list', () => {
+        const FooQuery = graphql`
+          query RelayResponseNormalizerTest40Query($id: ID!) {
+            node(id: $id) {
+              id
+              __typename
+              ... on User {
+                friends(first: 3) {
+                  edges {
+                    cursor
+                  }
+                }
+              }
+            }
+          }
+        `;
+        const payload = {
+          node: {
+            id: '1',
+            __typename: 'User',
+            friends: {
+              edges: [],
+            },
+          },
+        };
+        const errors = [
+          {
+            message: 'There was an error!',
+            path: ['node', 'friends', 'edges'],
+          },
+        ];
+        const recordSource = new RelayRecordSource();
+        recordSource.set(ROOT_ID, RelayModernRecord.create(ROOT_ID, ROOT_TYPE));
+        normalize(
+          recordSource,
+          createNormalizationSelector(FooQuery.operation, ROOT_ID, {
+            id: '1',
+            size: 32,
+          }),
+          payload,
+          defaultOptions,
+          errors,
+        );
+        expect(recordSource.toJSON()).toEqual({
+          '1': {
+            __id: '1',
+            __typename: 'User',
+            'friends(first:3)': {
+              __ref: 'client:1:friends(first:3)',
+            },
+            id: '1',
+          },
+          'client:1:friends(first:3)': {
+            __id: 'client:1:friends(first:3)',
+            __typename: 'FriendsConnection',
+            __errors: {
+              edges: [
+                {
+                  message: 'There was an error!',
+                },
+              ],
+            },
+            edges: {
+              __refs: [],
+            },
+          },
+          'client:root': {
+            __id: 'client:root',
+            __typename: '__Root',
+            'node(id:"1")': {__ref: '1'},
+          },
+        });
+      });
+
+      it('stores field errors on an scalar field that is an empty list', () => {
+        const FooQuery = graphql`
+          query RelayResponseNormalizerTest41Query($id: ID!) {
+            node(id: $id) {
+              id
+              __typename
+              ... on User {
+                emailAddresses
+              }
+            }
+          }
+        `;
+        const payload = {
+          node: {
+            id: '1',
+            __typename: 'User',
+            emailAddresses: [],
+          },
+        };
+        const errors = [
+          {
+            message: 'There was an error!',
+            path: ['node', 'emailAddresses'],
+          },
+        ];
+        const recordSource = new RelayRecordSource();
+        recordSource.set(ROOT_ID, RelayModernRecord.create(ROOT_ID, ROOT_TYPE));
+        normalize(
+          recordSource,
+          createNormalizationSelector(FooQuery.operation, ROOT_ID, {
+            id: '1',
+            size: 32,
+          }),
+          payload,
+          defaultOptions,
+          errors,
+        );
+        expect(recordSource.toJSON()).toEqual({
+          '1': {
+            __id: '1',
+            __typename: 'User',
+            __errors: {
+              emailAddresses: [
+                {
+                  message: 'There was an error!',
+                },
+              ],
+            },
+            id: '1',
+            emailAddresses: [],
+          },
+          'client:root': {
+            __id: 'client:root',
+            __typename: '__Root',
+            'node(id:"1")': {__ref: '1'},
+          },
+        });
       });
     });
   });

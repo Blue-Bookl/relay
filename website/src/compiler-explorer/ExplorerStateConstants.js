@@ -56,11 +56,30 @@ export const FEATURE_FLAGS = [
     kind: 'enum',
     default: true,
   },
+  {
+    key: 'skip_printing_nulls',
+    label: 'Skip Printing Nulls',
+    kind: 'enum',
+    default: false,
+  },
+  {
+    key: 'compact_query_text',
+    label: 'Compact Query Text',
+    kind: 'enum',
+    default: false,
+  },
+  {
+    key: 'enforce_fragment_alias_where_ambiguous',
+    label: 'Enforce @alias where ambiguous',
+    kind: 'enum',
+    default: true,
+  },
 ];
 
 export const DEFAULT_STATE = {
   schemaText: DEFAULT_SCHEMA,
   documentText: DEFAULT_DOCUMENT,
+  inputWindow: 'schema',
   outputType: 'operation',
   featureFlags: Object.fromEntries(FEATURE_FLAGS.map(f => [f.key, f.default])),
   language: 'typescript',

@@ -74,7 +74,7 @@ export type ClientRequestParameters = {
   +text: null,
   // common fields
   +name: string,
-  +operationKind: 'query',
+  +operationKind: 'query' | 'mutation',
   +providedVariables?: ProvidedVariablesType,
   +metadata: {[key: string]: mixed, ...},
 };
@@ -95,6 +95,7 @@ export type GeneratedNode =
 
 const RelayConcreteNode = {
   ACTOR_CHANGE: 'ActorChange',
+  CATCH_FIELD: 'CatchField',
   CONDITION: 'Condition',
   CLIENT_COMPONENT: 'ClientComponent',
   CLIENT_EDGE_TO_SERVER_OBJECT: 'ClientEdgeToServerObject',
@@ -129,6 +130,6 @@ const RelayConcreteNode = {
   TYPE_DISCRIMINATOR: 'TypeDiscriminator',
   UPDATABLE_QUERY: 'UpdatableQuery',
   VARIABLE: 'Variable',
-};
+} as const;
 
 module.exports = RelayConcreteNode;

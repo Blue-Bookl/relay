@@ -16,7 +16,7 @@ import type {
 } from '../../../relay-runtime/util/NormalizationNode';
 import type {LogEvent} from 'relay-runtime/store/RelayStoreTypes';
 
-const {createFragmentResource} = require('../FragmentResource');
+const {createFragmentResource} = require('../legacy/FragmentResource');
 const invariant = require('invariant');
 const {
   createOperationDescriptor,
@@ -26,8 +26,12 @@ const {
 const RelayOperationTracker = require('relay-runtime/store/RelayOperationTracker');
 const RelayFeatureFlags = require('relay-runtime/util/RelayFeatureFlags');
 const {createMockEnvironment} = require('relay-test-utils');
-const {disallowWarnings} = require('relay-test-utils-internal');
+const {
+  disallowWarnings,
+  injectPromisePolyfill__DEPRECATED,
+} = require('relay-test-utils-internal');
 
+injectPromisePolyfill__DEPRECATED();
 disallowWarnings();
 
 describe.each([true, false])(

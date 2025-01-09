@@ -15,24 +15,13 @@ import type {DataID} from 'relay-runtime/util/RelayRuntimeTypes';
 
 import RelayNetwork from '../../network/RelayNetwork';
 import {graphql} from '../../query/GraphQLTag';
-import RelayFeatureFlags from '../../util/RelayFeatureFlags';
-import LiveResolverStore from '../experimental-live-resolvers/LiveResolverStore';
 import RelayModernEnvironment from '../RelayModernEnvironment';
 import {createOperationDescriptor} from '../RelayModernOperationDescriptor';
 import {createNormalizationSelector} from '../RelayModernSelector';
+import RelayModernStore from '../RelayModernStore';
 import RelayRecordSource from '../RelayRecordSource';
 import {mark} from '../RelayReferenceMarker';
-import {ROOT_ID} from '../RelayStoreUtils';
-
-beforeEach(() => {
-  RelayFeatureFlags.ENABLE_RELAY_RESOLVERS = true;
-  RelayFeatureFlags.ENABLE_CLIENT_EDGES = true;
-});
-
-afterEach(() => {
-  RelayFeatureFlags.ENABLE_RELAY_RESOLVERS = false;
-  RelayFeatureFlags.ENABLE_CLIENT_EDGES = false;
-});
+import {RELAY_READ_TIME_RESOLVER_KEY_PREFIX, ROOT_ID} from '../RelayStoreUtils';
 
 describe('RelayReferenceMarker', () => {
   let source;
@@ -510,9 +499,11 @@ describe('RelayReferenceMarker', () => {
       `;
       loader = {
         get: jest.fn(
+          // $FlowFixMe[invalid-computed-prop]
           (moduleName: mixed) => nodes[String(moduleName).replace(/\$.*/, '')],
         ),
         load: jest.fn((moduleName: mixed) =>
+          // $FlowFixMe[invalid-computed-prop]
           Promise.resolve(nodes[String(moduleName).replace(/\$.*/, '')]),
         ),
       };
@@ -850,11 +841,14 @@ describe('RelayReferenceMarker', () => {
         'client:root': {
           __id: 'client:root',
           __typename: '__Root',
-          counter_no_fragment: {
-            __ref: 'client:root:counter_no_fragment',
+          // $FlowFixMe[invalid-computed-prop]
+          [`${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}counter_no_fragment`]: {
+            __ref: `client:root:${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}counter_no_fragment`,
           },
         },
-        'client:root:counter_no_fragment': {},
+        // $FlowFixMe[invalid-computed-prop]
+        [`client:root:${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}counter_no_fragment`]:
+          {},
       };
       const nodes = {
         FooQuery: graphql`
@@ -868,9 +862,11 @@ describe('RelayReferenceMarker', () => {
       const references = new Set<DataID>();
       const loader = {
         get: jest.fn(
+          // $FlowFixMe[invalid-computed-prop]
           (moduleName: mixed) => nodes[String(moduleName).replace(/\$.*/, '')],
         ),
         load: jest.fn((moduleName: mixed) =>
+          // $FlowFixMe[invalid-computed-prop]
           Promise.resolve(nodes[String(moduleName).replace(/\$.*/, '')]),
         ),
       };
@@ -886,7 +882,7 @@ describe('RelayReferenceMarker', () => {
       );
       expect(Array.from(references).sort()).toEqual([
         'client:root',
-        'client:root:counter_no_fragment',
+        `client:root:${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}counter_no_fragment`,
       ]);
     });
     it('with fragment dependency is retained', () => {
@@ -895,15 +891,17 @@ describe('RelayReferenceMarker', () => {
           __id: 'client:root',
           __typename: 'Query',
           me: {__ref: '1'},
-          counter: {
-            __ref: 'client:root:counter',
+          // $FlowFixMe[invalid-computed-prop]
+          [`${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}counter`]: {
+            __ref: `client:root:${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}counter`,
           },
         },
         '1': {
           __id: '1',
           __typename: 'User',
         },
-        'client:root:counter': {},
+        // $FlowFixMe[invalid-computed-prop]
+        [`client:root:${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}counter`]: {},
       };
       const nodes = {
         FooQuery: graphql`
@@ -917,9 +915,11 @@ describe('RelayReferenceMarker', () => {
       const references = new Set<DataID>();
       const loader = {
         get: jest.fn(
+          // $FlowFixMe[invalid-computed-prop]
           (moduleName: mixed) => nodes[String(moduleName).replace(/\$.*/, '')],
         ),
         load: jest.fn((moduleName: mixed) =>
+          // $FlowFixMe[invalid-computed-prop]
           Promise.resolve(nodes[String(moduleName).replace(/\$.*/, '')]),
         ),
       };
@@ -936,7 +936,7 @@ describe('RelayReferenceMarker', () => {
       expect(Array.from(references).sort()).toEqual([
         '1',
         'client:root',
-        'client:root:counter',
+        `client:root:${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}counter`,
       ]);
     });
     it('with @edgeTo client object is retained', () => {
@@ -965,14 +965,16 @@ describe('RelayReferenceMarker', () => {
       const references = new Set<DataID>();
       const loader = {
         get: jest.fn(
+          // $FlowFixMe[invalid-computed-prop]
           (moduleName: mixed) => nodes[String(moduleName).replace(/\$.*/, '')],
         ),
         load: jest.fn((moduleName: mixed) =>
+          // $FlowFixMe[invalid-computed-prop]
           Promise.resolve(nodes[String(moduleName).replace(/\$.*/, '')]),
         ),
       };
 
-      const store = new LiveResolverStore(source, {
+      const store = new RelayModernStore(source, {
         gcReleaseBufferSize: 0,
       });
       const environment = new RelayModernEnvironment({
@@ -1008,7 +1010,7 @@ describe('RelayReferenceMarker', () => {
         'client:AstrologicalSign:Taurus',
         'client:AstrologicalSign:Virgo',
         'client:root',
-        'client:root:all_astrological_signs',
+        `client:root:${RELAY_READ_TIME_RESOLVER_KEY_PREFIX}all_astrological_signs`,
       ]);
     });
   });
@@ -1057,9 +1059,11 @@ describe('RelayReferenceMarker', () => {
       `;
       loader = {
         get: jest.fn(
+          // $FlowFixMe[invalid-computed-prop]
           (moduleName: mixed) => nodes[String(moduleName).replace(/\$.*/, '')],
         ),
         load: jest.fn((moduleName: mixed) =>
+          // $FlowFixMe[invalid-computed-prop]
           Promise.resolve(nodes[String(moduleName).replace(/\$.*/, '')]),
         ),
       };

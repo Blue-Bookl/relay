@@ -28,6 +28,7 @@ import type {
   LogFunction,
   MissingFieldHandler,
   MutationParameters,
+  NormalizeResponseFunction,
   OperationAvailability,
   OperationDescriptor,
   OperationLoader,
@@ -35,7 +36,7 @@ import type {
   OptimisticResponseConfig,
   OptimisticUpdateFunction,
   PublishQueue,
-  RequiredFieldLogger,
+  RelayFieldLogger,
   SelectorStoreUpdater,
   SingularReaderSelector,
   Snapshot,
@@ -54,7 +55,8 @@ const wrapNetworkWithLogObserver = require('../network/wrapNetworkWithLogObserve
 const RelayOperationTracker = require('../store/RelayOperationTracker');
 const registerEnvironmentWithDevTools = require('../util/registerEnvironmentWithDevTools');
 const defaultGetDataID = require('./defaultGetDataID');
-const defaultRequiredFieldLogger = require('./defaultRequiredFieldLogger');
+const defaultRelayFieldLogger = require('./defaultRelayFieldLogger');
+const normalizeResponse = require('./normalizeResponse');
 const OperationExecutor = require('./OperationExecutor');
 const RelayPublishQueue = require('./RelayPublishQueue');
 const RelayRecordSource = require('./RelayRecordSource');
@@ -67,6 +69,7 @@ export type EnvironmentConfig = {
   +log?: ?LogFunction,
   +operationLoader?: ?OperationLoader,
   +network: INetwork,
+  +normalizeResponse?: ?NormalizeResponseFunction,
   +scheduler?: ?TaskScheduler,
   +store: Store,
   +missingFieldHandlers?: ?$ReadOnlyArray<MissingFieldHandler>,
@@ -75,7 +78,7 @@ export type EnvironmentConfig = {
   +UNSTABLE_defaultRenderPolicy?: ?RenderPolicy,
   +options?: mixed,
   +isServer?: boolean,
-  +requiredFieldLogger?: ?RequiredFieldLogger,
+  +relayFieldLogger?: ?RelayFieldLogger,
   +shouldProcessClientComponents?: ?boolean,
 };
 
@@ -96,7 +99,8 @@ class RelayModernEnvironment implements IEnvironment {
   _operationExecutions: Map<string, ActiveState>;
   +options: mixed;
   +_isServer: boolean;
-  requiredFieldLogger: RequiredFieldLogger;
+  relayFieldLogger: RelayFieldLogger;
+  _normalizeResponse: NormalizeResponseFunction;
 
   constructor(config: EnvironmentConfig) {
     this.configName = config.configName;
@@ -115,8 +119,7 @@ class RelayModernEnvironment implements IEnvironment {
       }
     }
     this.__log = config.log ?? emptyFunction;
-    this.requiredFieldLogger =
-      config.requiredFieldLogger ?? defaultRequiredFieldLogger;
+    this.relayFieldLogger = config.relayFieldLogger ?? defaultRelayFieldLogger;
     this._defaultRenderPolicy =
       config.UNSTABLE_defaultRenderPolicy ?? 'partial';
     this._operationLoader = operationLoader;
@@ -134,6 +137,7 @@ class RelayModernEnvironment implements IEnvironment {
     this._store = config.store;
     this.options = config.options;
     this._isServer = config.isServer ?? false;
+    this._normalizeResponse = config.normalizeResponse ?? normalizeResponse;
 
     (this: any).__setNet = newNet =>
       (this._network = wrapNetworkWithLogObserver(this, newNet));
@@ -481,6 +485,7 @@ class RelayModernEnvironment implements IEnvironment {
         },
         treatMissingFieldsAsNull: this._treatMissingFieldsAsNull,
         updater,
+        normalizeResponse: this._normalizeResponse,
       });
       return () => executor.cancel();
     });

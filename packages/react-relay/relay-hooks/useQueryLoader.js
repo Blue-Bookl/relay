@@ -23,11 +23,12 @@ import type {
   Variables,
 } from 'relay-runtime';
 
-const {loadQuery, useTrackLoadQueryInRender} = require('./loadQuery');
+const {loadQuery} = require('./loadQuery');
 const useIsMountedRef = require('./useIsMountedRef');
+const useQueryLoader_EXPERIMENTAL = require('./useQueryLoader_EXPERIMENTAL');
 const useRelayEnvironment = require('./useRelayEnvironment');
 const {useCallback, useEffect, useRef, useState} = require('react');
-const {getRequest} = require('relay-runtime');
+const {RelayFeatureFlags, getRequest} = require('relay-runtime');
 
 export type LoaderFn<TQuery: OperationType> = (
   variables: TQuery['variables'],
@@ -42,7 +43,7 @@ export type UseQueryLoaderLoadQueryOptions = $ReadOnly<{
 // NullQueryReference needs to implement referential equality,
 // so that multiple NullQueryReferences can be in the same set
 // (corresponding to multiple calls to disposeQuery).
-type NullQueryReference = {
+export type NullQueryReference = {
   kind: 'NullQueryReference',
 };
 const initialNullQueryReferenceState = {kind: 'NullQueryReference'};
@@ -68,7 +69,7 @@ function requestIsLiveQuery<
   return request.params.metadata.live !== undefined;
 }
 
-type UseQueryLoaderHookReturnType<
+export type UseQueryLoaderHookReturnType<
   TVariables: Variables,
   TData,
   TRawResponse: ?{...} = void,
@@ -108,7 +109,26 @@ declare function useQueryLoader<TQuery: OperationType>(
   initialQueryReference?: ?PreloadedQuery<TQuery>,
 ): UseQueryLoaderHookReturnType<TQuery['variables'], TQuery['response']>;
 
-function useQueryLoader<
+hook useQueryLoader<TVariables: Variables, TData, TRawResponse: ?{...} = void>(
+  preloadableRequest: Query<TVariables, TData, TRawResponse>,
+  initialQueryReference?: ?PreloadedQuery<{
+    response: TData,
+    variables: TVariables,
+    rawResponse?: $NonMaybeType<TRawResponse>,
+  }>,
+): UseQueryLoaderHookReturnType<TVariables, TData> {
+  if (RelayFeatureFlags.ENABLE_ACTIVITY_COMPATIBILITY) {
+    // $FlowFixMe[react-rule-hook] - the condition is static
+    return useQueryLoader_EXPERIMENTAL(
+      preloadableRequest,
+      initialQueryReference,
+    );
+  }
+  // $FlowFixMe[react-rule-hook] - the condition is static
+  return useQueryLoader_CURRENT(preloadableRequest, initialQueryReference);
+}
+
+hook useQueryLoader_CURRENT<
   TVariables: Variables,
   TData,
   TRawResponse: ?{...} = void,
@@ -150,7 +170,6 @@ function useQueryLoader<
     initialQueryReference ?? initialNullQueryReferenceState;
 
   const environment = useRelayEnvironment();
-  useTrackLoadQueryInRender();
 
   const isMountedRef = useIsMountedRef();
   const undisposedQueryReferencesRef = useRef<
@@ -172,6 +191,7 @@ function useQueryLoader<
     // necessary here
     // TODO(T78446637): Handle disposal of managed query references in
     // components that were never mounted after rendering
+    // $FlowFixMe[react-rule-unsafe-ref]
     undisposedQueryReferencesRef.current.add(initialQueryReferenceInternal);
     setPreviousInitialQueryReference(initialQueryReferenceInternal);
     setQueryReference(initialQueryReferenceInternal);
@@ -195,7 +215,7 @@ function useQueryLoader<
             }
           : options;
       if (isMountedRef.current) {
-        const updatedQueryReference = loadQuery<QueryType>(
+        const updatedQueryReference = loadQuery(
           options?.__environment ?? environment,
           preloadableRequest,
           variables,

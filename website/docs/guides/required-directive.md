@@ -27,7 +27,7 @@ query MyQuery {
 }
 ```
 
-If `name` is null, relay would return `{ viewer: null }`. You can think of `@required` in this instance as saying "`viewer` is useless without a `name`".
+If `name` is null, Relay would return `{ viewer: null }`. You can think of `@required` in this instance as saying "`viewer` is useless without a `name`".
 
 ## Action
 
@@ -39,15 +39,7 @@ This field is expected to be null sometimes.
 
 ### `LOG` (recoverable)
 
-This value is not expected to ever be null, but the component **can still render** if it is. If a field with `action: LOG` is null, the Relay environment logger will receive an event that looks like this:
-
-```javascript
-{
-  name: 'read.missing_required_field',
-  owner: string, // MyFragmentOrQueryName
-  fieldPath: string, // path.to.my.field
-};
-```
+This value is not expected to ever be null, but the component **can still render** if it is. If a field with `action: LOG` is null, the [Relay field logger](../api-reference/relay-runtime/field-logger.md) will receive a `missing_required_field.log` event.
 
 ### `THROW` (unrecoverable)
 
@@ -55,7 +47,7 @@ This value should not be null, and the component **cannot render without it**. I
 
 ## Locality
 
-A field's `@required` status is **local to the fragment where it is specified**. This allows you to add add/remove the directive without having to think about anything outside the scope of your component.
+A field's `@required` status is **local to the fragment where it is specified**. This allows you to add/remove the directive without having to think about anything outside the scope of your component.
 
 This choice reflects the fact that some components may be able to recover better from missing data than others. For example, a `<RestaurantInfo />` component could probably render something sensible even if the restaurant's address is missing, but a `<RestaurantLocationMap />` component might not.
 

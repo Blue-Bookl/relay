@@ -6,7 +6,7 @@
  *
  * @oncall relay
  *
- * @generated SignedSource<<feb92e5348f100316725cc2d42be0bf1>>
+ * @generated SignedSource<<b1534f6e92276b3ecddd22e5ad2fb11d>>
  * @flow
  * @lightSyntaxTransform
  * @nogrep
@@ -18,17 +18,17 @@
 
 /*::
 import type { ConcreteRequest, Query } from 'relay-runtime';
-import type { DataID } from "relay-runtime";
 import {client_object as userClientObjectResolverType} from "../resolvers/UserClientEdgeClientObjectResolver.js";
+import type { TestResolverContextType } from "../../../mutations/__tests__/TestResolverContextType";
 // Type assertion validating that `userClientObjectResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
 (userClientObjectResolverType: (
   args: {|
-    id: string,
+    return_null: boolean,
   |},
-) => ?{|
-  +id: DataID,
-|});
+  context: TestResolverContextType,
+) => ?User__client_object$normalization);
+import type { User__client_object$normalization } from "./../resolvers/__generated__/User__client_object$normalization.graphql";
 export type RelayReaderRequiredFieldsTest25Query$variables = {||};
 export type RelayReaderRequiredFieldsTest25Query$data = {|
   +me: ?{|
@@ -47,8 +47,8 @@ var node/*: ConcreteRequest*/ = (function(){
 var v0 = [
   {
     "kind": "Literal",
-    "name": "id",
-    "value": "0"
+    "name": "return_null",
+    "value": true
   }
 ],
 v1 = {
@@ -67,7 +67,7 @@ v1 = {
       "storageKey": null
     }
   ],
-  "storageKey": "client_object(id:\"0\")"
+  "storageKey": "client_object(return_null:true)"
 };
 return {
   "fragment": {
@@ -91,6 +91,7 @@ return {
             "field": {
               "kind": "ClientEdgeToClientObject",
               "concreteType": "ClientObject",
+              "modelResolvers": null,
               "backingField": {
                 "alias": null,
                 "args": (v0/*: any*/),
@@ -98,12 +99,17 @@ return {
                 "kind": "RelayResolver",
                 "name": "client_object",
                 "resolverModule": require('./../resolvers/UserClientEdgeClientObjectResolver').client_object,
-                "path": "me.client_object"
+                "path": "me.client_object",
+                "normalizationInfo": {
+                  "kind": "OutputType",
+                  "concreteType": "ClientObject",
+                  "plural": false,
+                  "normalizationNode": require('./../resolvers/__generated__/User__client_object$normalization.graphql')
+                }
               },
               "linkedField": (v1/*: any*/)
             },
-            "action": "THROW",
-            "path": "me.client_object"
+            "action": "THROW"
           }
         ],
         "storageKey": null
@@ -133,8 +139,8 @@ return {
               "args": (v0/*: any*/),
               "fragment": null,
               "kind": "RelayResolver",
-              "storageKey": "client_object(id:\"0\")",
-              "isOutputType": false
+              "storageKey": "client_object(return_null:true)",
+              "isOutputType": true
             },
             "linkedField": (v1/*: any*/)
           },
@@ -162,7 +168,7 @@ return {
 })();
 
 if (__DEV__) {
-  (node/*: any*/).hash = "6721f9f04ecd26abc9478d3c678ead79";
+  (node/*: any*/).hash = "779eb09bcd57cff82e91efb6a9e12664";
 }
 
 module.exports = ((node/*: any*/)/*: Query<

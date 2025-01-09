@@ -6,7 +6,7 @@
  *
  * @oncall relay
  *
- * @generated SignedSource<<3e60fe0c444d7746512c0d63621044e5>>
+ * @generated SignedSource<<ce9ce75fd811f1a092d3c02fc6cebd78>>
  * @flow
  * @lightSyntaxTransform
  * @nogrep
@@ -19,16 +19,18 @@
 /*::
 import type { ClientRequest, ClientQuery } from 'relay-runtime';
 import {hello as queryHelloResolverType} from "../HelloWorldResolver.js";
+import type { TestResolverContextType } from "../../../../mutations/__tests__/TestResolverContextType";
 // Type assertion validating that `queryHelloResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
 (queryHelloResolverType: (
   args: {|
     world: string,
   |},
-) => ?mixed);
+  context: TestResolverContextType,
+) => ?string);
 export type ResolverGCTestNoFragmentStaticArgsQuery$variables = {||};
 export type ResolverGCTestNoFragmentStaticArgsQuery$data = {|
-  +hello: ?ReturnType<typeof queryHelloResolverType>,
+  +hello: ?string,
 |};
 export type ResolverGCTestNoFragmentStaticArgsQuery = {|
   response: ResolverGCTestNoFragmentStaticArgsQuery$data,
@@ -84,7 +86,7 @@ return {
             "fragment": null,
             "kind": "RelayResolver",
             "storageKey": "hello(world:\"Planet\")",
-            "isOutputType": false
+            "isOutputType": true
           }
         ]
       }

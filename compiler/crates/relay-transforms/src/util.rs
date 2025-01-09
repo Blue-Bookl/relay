@@ -23,8 +23,10 @@ use schema::SDLSchema;
 use schema::Schema;
 use schema::Type;
 
+use crate::catch_directive::CATCH_DIRECTIVE_NAME;
 use crate::client_extensions::CLIENT_EXTENSION_DIRECTIVE_NAME;
 use crate::connections::ConnectionMetadataDirective;
+use crate::fragment_alias_directive::FRAGMENT_DANGEROUSLY_UNALIAS_DIRECTIVE_NAME;
 use crate::handle_fields::HANDLE_FIELD_DIRECTIVE_NAME;
 use crate::inline_data_fragment::InlineDirectiveMetadata;
 use crate::refetchable_fragment::RefetchableMetadata;
@@ -84,7 +86,8 @@ pub fn extract_variable_name(argument: Option<&Argument>) -> Option<StringKey> {
 }
 
 lazy_static! {
-    static ref CUSTOM_METADATA_DIRECTIVES: [DirectiveName; 19] = [
+    static ref CUSTOM_METADATA_DIRECTIVES: [DirectiveName; 20] = [
+        *CATCH_DIRECTIVE_NAME,
         *CLIENT_EXTENSION_DIRECTIVE_NAME,
         ConnectionMetadataDirective::directive_name(),
         *HANDLE_FIELD_DIRECTIVE_NAME,
@@ -105,7 +108,8 @@ lazy_static! {
         ProvidedVariableMetadata::directive_name(),
         FragmentAliasMetadata::directive_name(),
     ];
-    static ref DIRECTIVES_SKIPPED_IN_NODE_IDENTIFIER: [DirectiveName; 8] = [
+    static ref DIRECTIVES_SKIPPED_IN_NODE_IDENTIFIER: [DirectiveName; 10] = [
+        *CATCH_DIRECTIVE_NAME,
         *CLIENT_EXTENSION_DIRECTIVE_NAME,
         ConnectionMetadataDirective::directive_name(),
         *HANDLE_FIELD_DIRECTIVE_NAME,
@@ -114,6 +118,7 @@ lazy_static! {
         *INTERNAL_METADATA_DIRECTIVE,
         *ARGUMENT_DEFINITION,
         *REQUIRED_DIRECTIVE_NAME,
+        *FRAGMENT_DANGEROUSLY_UNALIAS_DIRECTIVE_NAME
     ];
     static ref RELAY_CUSTOM_INLINE_FRAGMENT_DIRECTIVES: [DirectiveName; 8] = [
         *CLIENT_EXTENSION_DIRECTIVE_NAME,
@@ -157,7 +162,7 @@ pub fn get_normalization_operation_name(name: StringKey) -> String {
     format!("{}$normalization", name)
 }
 
-pub fn get_fragment_filename(fragment_name: FragmentDefinitionName) -> StringKey {
+pub fn get_normalization_fragment_filename(fragment_name: FragmentDefinitionName) -> StringKey {
     format!(
         "{}.graphql",
         get_normalization_operation_name(fragment_name.0)

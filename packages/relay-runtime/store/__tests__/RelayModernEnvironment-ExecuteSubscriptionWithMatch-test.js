@@ -37,8 +37,12 @@ const {
 const RelayModernStore = require('../RelayModernStore');
 const RelayRecordSource = require('../RelayRecordSource');
 const nullthrows = require('nullthrows');
-const {disallowWarnings} = require('relay-test-utils-internal');
+const {
+  disallowWarnings,
+  injectPromisePolyfill__DEPRECATED,
+} = require('relay-test-utils-internal');
 
+injectPromisePolyfill__DEPRECATED();
 disallowWarnings();
 
 describe.each(['RelayModernEnvironment', 'MultiActorEnvironment'])(
@@ -295,12 +299,12 @@ describe.each(['RelayModernEnvironment', 'MultiActorEnvironment'])(
                   __fragmentPropName: 'name',
                   __fragments: {
                     RelayModernEnvironmentExecuteSubscriptionWithMatchTestMarkdownUserNameRenderer_name:
-                      {},
+                      {
+                        // TODO T96653810: Correctly detect reading from root of mutation/subscription
+                        $isWithinUnmatchedTypeRefinement: true, // should be false
+                      },
                   },
                   __fragmentOwner: operation.request,
-
-                  // TODO T96653810: Correctly detect reading from root of mutation/subscription
-                  __isWithinUnmatchedTypeRefinement: true, // should be false
 
                   __module_component: 'MarkdownUserNameRenderer.react',
                 },

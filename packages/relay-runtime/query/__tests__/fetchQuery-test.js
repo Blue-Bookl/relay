@@ -11,7 +11,7 @@
 
 'use strict';
 
-import type {RequiredFieldLoggerEvent} from '../../store/RelayStoreTypes';
+import type {RelayFieldLoggerEvent} from '../../store/RelayStoreTypes';
 import type {fetchQueryTest1Query$data} from './__generated__/fetchQueryTest1Query.graphql';
 import type {RequestParameters} from 'relay-runtime';
 
@@ -240,9 +240,9 @@ describe('fetchQuery', () => {
 
 describe('fetchQuery with missing @required value', () => {
   it('provides data snapshot on next', () => {
-    const requiredFieldLogger = jest.fn<[RequiredFieldLoggerEvent], void>();
+    const relayFieldLogger = jest.fn<[RelayFieldLoggerEvent], void>();
     const environment = createMockEnvironment({
-      requiredFieldLogger,
+      relayFieldLogger,
     });
     const query = graphql`
       query fetchQueryTest2Query {
@@ -267,16 +267,16 @@ describe('fetchQuery with missing @required value', () => {
     });
     subscription.unsubscribe();
     expect(observer.next).toHaveBeenCalledWith({me: null});
-    expect(requiredFieldLogger).toHaveBeenCalledWith({
+    expect(relayFieldLogger).toHaveBeenCalledWith({
       fieldPath: 'me.name',
-      kind: 'missing_field.log',
+      kind: 'missing_required_field.log',
       owner: 'fetchQueryTest2Query',
     });
   });
 
   it('throws on resolution', () => {
-    const requiredFieldLogger = jest.fn<[RequiredFieldLoggerEvent], void>();
-    const environment = createMockEnvironment({requiredFieldLogger});
+    const relayFieldLogger = jest.fn<[RelayFieldLoggerEvent], void>();
+    const environment = createMockEnvironment({relayFieldLogger});
     const query = graphql`
       query fetchQueryTest3Query {
         me {
@@ -299,10 +299,11 @@ describe('fetchQuery with missing @required value', () => {
       data: {me: {id: 'ID-1', name: null}},
     });
     subscription.unsubscribe();
-    expect(requiredFieldLogger).toHaveBeenCalledWith({
+    expect(relayFieldLogger).toHaveBeenCalledWith({
       fieldPath: 'me.name',
-      kind: 'missing_field.throw',
+      kind: 'missing_required_field.throw',
       owner: 'fetchQueryTest3Query',
+      handled: false,
     });
     expect(observer.error).toHaveBeenCalledWith(
       Error(

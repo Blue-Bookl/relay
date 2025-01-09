@@ -11,8 +11,8 @@
 
 'use strict';
 
+const useFragmentNode = require('../legacy/useFragmentNode');
 const RelayEnvironmentProvider = require('../RelayEnvironmentProvider');
-const useFragmentNode = require('../useFragmentNode');
 const React = require('react');
 const {useEffect} = require('react');
 const ReactTestRenderer = require('react-test-renderer');
@@ -74,7 +74,7 @@ describe.skip('useFragmentNode-react-double-effects-test', () => {
     warning.mockClear();
 
     let renderLogs = [];
-    const FragmentComponent = ({user}: $TEMPORARY$object<{user: mixed}>) => {
+    const FragmentComponent = ({user}: $ReadOnly<{user: mixed}>) => {
       const {data} = useFragmentNode<any>(gqlFragment, user, 'TestComponent');
       useEffect(() => {
         renderLogs.push(`commit: ${data.name}`);

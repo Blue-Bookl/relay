@@ -12,11 +12,12 @@
 'use strict';
 
 import type {ActorIdentifier} from '../multi-actor-environment/ActorIdentifier';
-import type {PayloadData} from '../network/RelayNetworkTypes';
+import type {PayloadData, PayloadError} from '../network/RelayNetworkTypes';
 import type {
   NormalizationActorChange,
   NormalizationDefer,
   NormalizationLinkedField,
+  NormalizationLiveResolverField,
   NormalizationModuleImport,
   NormalizationNode,
   NormalizationResolverField,
@@ -24,6 +25,7 @@ import type {
   NormalizationStream,
 } from '../util/NormalizationNode';
 import type {DataID, Variables} from '../util/RelayRuntimeTypes';
+import type {RelayErrorTrie} from './RelayErrorTrie';
 import type {
   FollowupPayload,
   HandleFieldPayload,
@@ -38,26 +40,14 @@ const {
   ACTOR_IDENTIFIER_FIELD_NAME,
   getActorIdentifierFromPayload,
 } = require('../multi-actor-environment/ActorUtils');
-const {
-  ACTOR_CHANGE,
-  CLIENT_COMPONENT,
-  CLIENT_EDGE_TO_CLIENT_OBJECT,
-  CLIENT_EXTENSION,
-  CONDITION,
-  DEFER,
-  FRAGMENT_SPREAD,
-  INLINE_FRAGMENT,
-  LINKED_FIELD,
-  LINKED_HANDLE,
-  MODULE_IMPORT,
-  RELAY_RESOLVER,
-  SCALAR_FIELD,
-  SCALAR_HANDLE,
-  STREAM,
-  TYPE_DISCRIMINATOR,
-} = require('../util/RelayConcreteNode');
+const RelayFeatureFlags = require('../util/RelayFeatureFlags');
 const {generateClientID, isClientID} = require('./ClientID');
 const {getLocalVariables} = require('./RelayConcreteVariables');
+const {
+  buildErrorTrie,
+  getErrorsByKey,
+  getNestedErrorTrieByKey,
+} = require('./RelayErrorTrie');
 const RelayModernRecord = require('./RelayModernRecord');
 const {createNormalizationSelector} = require('./RelayModernSelector');
 const {
@@ -96,6 +86,7 @@ function normalize(
   selector: NormalizationSelector,
   response: PayloadData,
   options: NormalizationOptions,
+  errors?: Array<PayloadError>,
 ): RelayResponsePayload {
   const {dataID, node, variables} = selector;
   const normalizer = new RelayResponseNormalizer(
@@ -103,7 +94,7 @@ function normalize(
     variables,
     options,
   );
-  return normalizer.normalizeResponse(node, dataID, response);
+  return normalizer.normalizeResponse(node, dataID, response, errors);
 }
 
 /**
@@ -124,6 +115,7 @@ class RelayResponseNormalizer {
   _recordSource: MutableRecordSource;
   _variables: Variables;
   _shouldProcessClientComponents: ?boolean;
+  _errorTrie: RelayErrorTrie | null;
 
   constructor(
     recordSource: MutableRecordSource,
@@ -148,6 +140,7 @@ class RelayResponseNormalizer {
     node: NormalizationNode,
     dataID: DataID,
     data: PayloadData,
+    errors?: Array<PayloadError>,
   ): RelayResponsePayload {
     const record = this._recordSource.get(dataID);
     invariant(
@@ -156,9 +149,10 @@ class RelayResponseNormalizer {
       dataID,
     );
     this._assignClientAbstractTypes(node);
+    this._errorTrie = buildErrorTrie(errors);
     this._traverseSelections(node, record, data);
     return {
-      errors: null,
+      errors,
       fieldPayloads: this._handleFieldPayloads,
       incrementalPlaceholders: this._incrementalPlaceholders,
       followupPayloads: this._followupPayloads,
@@ -215,11 +209,11 @@ class RelayResponseNormalizer {
     for (let i = 0; i < node.selections.length; i++) {
       const selection = node.selections[i];
       switch (selection.kind) {
-        case SCALAR_FIELD:
-        case LINKED_FIELD:
+        case 'ScalarField':
+        case 'LinkedField':
           this._normalizeField(selection, record, data);
           break;
-        case CONDITION:
+        case 'Condition':
           const conditionValue = Boolean(
             this._getVariableValue(selection.condition),
           );
@@ -227,7 +221,7 @@ class RelayResponseNormalizer {
             this._traverseSelections(selection, record, data);
           }
           break;
-        case FRAGMENT_SPREAD: {
+        case 'FragmentSpread': {
           const prevVariables = this._variables;
           this._variables = getLocalVariables(
             this._variables,
@@ -238,7 +232,7 @@ class RelayResponseNormalizer {
           this._variables = prevVariables;
           break;
         }
-        case INLINE_FRAGMENT: {
+        case 'InlineFragment': {
           const {abstractKey} = selection;
           if (abstractKey == null) {
             const typeName = RelayModernRecord.getType(record);
@@ -265,7 +259,7 @@ class RelayResponseNormalizer {
           }
           break;
         }
-        case TYPE_DISCRIMINATOR: {
+        case 'TypeDiscriminator': {
           const {abstractKey} = selection;
           const implementsInterface = data.hasOwnProperty(abstractKey);
           const typeName = RelayModernRecord.getType(record);
@@ -282,8 +276,8 @@ class RelayResponseNormalizer {
           );
           break;
         }
-        case LINKED_HANDLE:
-        case SCALAR_HANDLE:
+        case 'LinkedHandle':
+        case 'ScalarHandle':
           const args = selection.args
             ? getArgumentValues(selection.args, this._variables)
             : {};
@@ -300,34 +294,37 @@ class RelayResponseNormalizer {
               : {},
           });
           break;
-        case MODULE_IMPORT:
+        case 'ModuleImport':
           this._normalizeModuleImport(selection, record, data);
           break;
-        case DEFER:
+        case 'Defer':
           this._normalizeDefer(selection, record, data);
           break;
-        case STREAM:
+        case 'Stream':
           this._normalizeStream(selection, record, data);
           break;
-        case CLIENT_EXTENSION:
+        case 'ClientExtension':
           const isClientExtension = this._isClientExtension;
           this._isClientExtension = true;
           this._traverseSelections(selection, record, data);
           this._isClientExtension = isClientExtension;
           break;
-        case CLIENT_COMPONENT:
+        case 'ClientComponent':
           if (this._shouldProcessClientComponents === false) {
             break;
           }
           this._traverseSelections(selection.fragment, record, data);
           break;
-        case ACTOR_CHANGE:
+        case 'ActorChange':
           this._normalizeActorChange(selection, record, data);
           break;
-        case RELAY_RESOLVER:
+        case 'RelayResolver':
           this._normalizeResolver(selection, record, data);
           break;
-        case CLIENT_EDGE_TO_CLIENT_OBJECT:
+        case 'RelayLiveResolver':
+          this._normalizeResolver(selection, record, data);
+          break;
+        case 'ClientEdgeToClientObject':
           this._normalizeResolver(selection.backingField, record, data);
           break;
         default:
@@ -342,7 +339,7 @@ class RelayResponseNormalizer {
   }
 
   _normalizeResolver(
-    resolver: NormalizationResolverField,
+    resolver: NormalizationResolverField | NormalizationLiveResolverField,
     record: Record,
     data: PayloadData,
   ) {
@@ -475,7 +472,11 @@ class RelayResponseNormalizer {
     const responseKey = selection.alias || selection.name;
     const storageKey = getStorageKey(selection, this._variables);
     const fieldValue = data[responseKey];
-    if (fieldValue == null) {
+    const isNoncompliantlyNullish =
+      RelayFeatureFlags.ENABLE_NONCOMPLIANT_ERROR_HANDLING_ON_LISTS &&
+      Array.isArray(fieldValue) &&
+      fieldValue.length === 0;
+    if (fieldValue == null || isNoncompliantlyNullish) {
       if (fieldValue === undefined) {
         // Fields may be missing in the response in two main cases:
         // - Inside a client extension: the server will not generally return
@@ -510,7 +511,7 @@ class RelayResponseNormalizer {
         }
       }
       if (__DEV__) {
-        if (selection.kind === SCALAR_FIELD) {
+        if (selection.kind === 'ScalarField') {
           this._validateConflictingFieldsWithIdenticalId(
             record,
             storageKey,
@@ -522,11 +523,27 @@ class RelayResponseNormalizer {
           );
         }
       }
-      RelayModernRecord.setValue(record, storageKey, null);
+      if (isNoncompliantlyNullish) {
+        // We need to preserve the fact that we received an empty list
+        if (selection.kind === 'LinkedField') {
+          RelayModernRecord.setLinkedRecordIDs(record, storageKey, []);
+        } else {
+          RelayModernRecord.setValue(record, storageKey, []);
+        }
+      } else {
+        RelayModernRecord.setValue(record, storageKey, null);
+      }
+      const errorTrie = this._errorTrie;
+      if (errorTrie != null) {
+        const errors = getErrorsByKey(errorTrie, responseKey);
+        if (errors != null) {
+          RelayModernRecord.setErrors(record, storageKey, errors);
+        }
+      }
       return;
     }
 
-    if (selection.kind === SCALAR_FIELD) {
+    if (selection.kind === 'ScalarField') {
       if (__DEV__) {
         this._validateConflictingFieldsWithIdenticalId(
           record,
@@ -535,13 +552,19 @@ class RelayResponseNormalizer {
         );
       }
       RelayModernRecord.setValue(record, storageKey, fieldValue);
-    } else if (selection.kind === LINKED_FIELD) {
+    } else if (selection.kind === 'LinkedField') {
       this._path.push(responseKey);
+      const oldErrorTrie = this._errorTrie;
+      this._errorTrie =
+        oldErrorTrie == null
+          ? null
+          : getNestedErrorTrieByKey(oldErrorTrie, responseKey);
       if (selection.plural) {
         this._normalizePluralLink(selection, record, storageKey, fieldValue);
       } else {
         this._normalizeLink(selection, record, storageKey, fieldValue);
       }
+      this._errorTrie = oldErrorTrie;
       this._path.pop();
     } else {
       (selection: empty);
@@ -713,6 +736,11 @@ class RelayResponseNormalizer {
         return;
       }
       this._path.push(String(nextIndex));
+      const oldErrorTrie = this._errorTrie;
+      this._errorTrie =
+        oldErrorTrie == null
+          ? null
+          : getNestedErrorTrieByKey(oldErrorTrie, nextIndex);
       invariant(
         typeof item === 'object',
         'RelayResponseNormalizer: Expected elements for field `%s` to be ' +
@@ -762,6 +790,7 @@ class RelayResponseNormalizer {
       }
       // $FlowFixMe[incompatible-variance]
       this._traverseSelections(field, nextRecord, item);
+      this._errorTrie = oldErrorTrie;
       this._path.pop();
     });
     RelayModernRecord.setLinkedRecordIDs(record, storageKey, nextIDs);

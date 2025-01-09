@@ -5,6 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+//! The compiler module compiles Relay source code into efficient and optimized runtime artifacts.
+//!
+//! The main entrypoint function for this module is `compile`. It performs several steps including:
+//! * Parsing GraphQL sources into an abstract syntax tree (AST)
+//! * Validating the AST against the GraphQL specification
+//! * Applying transformations to the AST
+//! * Generating output files based on the transformed AST
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -29,6 +36,7 @@ use crate::build_project::BuildProjectFailure;
 use crate::compiler_state::ArtifactMapKind;
 use crate::compiler_state::CompilerState;
 use crate::compiler_state::DocblockSources;
+use crate::compiler_state::FullSources;
 use crate::config::Config;
 use crate::errors::Error;
 use crate::errors::Result;
@@ -95,6 +103,7 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
     pub async fn watch(&self) -> Result<()> {
         'watch: loop {
             let setup_event = self.perf_logger.create_event("compiler_setup");
+            let initial_watch_compile_timer = setup_event.start("initial_watch_compile");
             self.config.status_reporter.build_starts();
             let result: Result<(CompilerState, Arc<Notify>, JoinHandle<()>)> = async {
                 if let Some(initialize_resources) = &self.config.initialize_resources {
@@ -171,7 +180,7 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                             self.config.status_reporter.build_errors(&err);
                         }
                     };
-
+                    setup_event.stop(initial_watch_compile_timer);
                     setup_event.complete();
                     info!("Watching for new changes...");
 
@@ -303,6 +312,7 @@ async fn build_projects<TPerfLogger: PerfLogger + 'static>(
         GraphQLAsts::from_graphql_sources_map(
             &compiler_state.graphql_sources,
             &dirty_artifact_sources,
+            &config,
         )
     })?;
 
@@ -376,6 +386,9 @@ async fn build_projects<TPerfLogger: PerfLogger + 'static>(
             get_removed_docblock_artifact_source_keys(compiler_state.docblocks.get(&project_name));
 
         removed_artifact_sources.extend(removed_docblock_artifact_sources);
+        removed_artifact_sources.extend(get_removed_full_sources(
+            compiler_state.full_sources.get(&project_name),
+        ));
 
         let dirty_artifact_paths = compiler_state
             .dirty_artifact_paths
@@ -478,9 +491,25 @@ fn get_removed_docblock_artifact_source_keys(
                 }
             }
         }
-
-        removed_docblocks
-    } else {
-        vec![]
     }
+
+    removed_docblocks
+}
+
+/// Get the list of removed full sources.
+fn get_removed_full_sources(full_sources: Option<&FullSources>) -> Vec<ArtifactSourceKey> {
+    let mut removed_full_sources: Vec<ArtifactSourceKey> = vec![];
+    if let Some(full_sources) = full_sources {
+        for (file, source) in full_sources.pending.iter() {
+            if source.is_empty() {
+                if let Some(text) = full_sources.processed.get(file) {
+                    // For now, full sources are only used for ResolverHash
+                    removed_full_sources.push(ArtifactSourceKey::ResolverHash(
+                        ResolverSourceHash::new(text),
+                    ))
+                }
+            }
+        }
+    }
+    removed_full_sources
 }

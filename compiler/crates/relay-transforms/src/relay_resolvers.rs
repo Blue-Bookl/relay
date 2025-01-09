@@ -22,11 +22,14 @@ use docblock_shared::INJECT_FRAGMENT_DATA_ARGUMENT_NAME;
 use docblock_shared::LIVE_ARGUMENT_NAME;
 use docblock_shared::RELAY_RESOLVER_DIRECTIVE_NAME;
 use docblock_shared::RELAY_RESOLVER_WEAK_OBJECT_DIRECTIVE;
+use docblock_shared::RESOLVER_PROPERTY_LOOKUP_NAME;
+use docblock_shared::TYPE_CONFIRMED_ARGUMENT_NAME;
 use graphql_ir::associated_data_impl;
 use graphql_ir::Argument;
 use graphql_ir::Directive;
 use graphql_ir::Field as IrField;
 use graphql_ir::FragmentDefinitionName;
+use graphql_ir::FragmentSignature;
 use graphql_ir::FragmentSpread;
 use graphql_ir::InlineFragment;
 use graphql_ir::LinkedField;
@@ -68,13 +71,8 @@ use crate::REQUIRED_DIRECTIVE_NAME;
 ///
 /// See the docblock for `relay_resolvers_spread_transform` for more details
 /// about the resulting format.
-pub fn relay_resolvers(
-    project_name: ProjectName,
-    program: &Program,
-    enabled: bool,
-) -> DiagnosticsResult<Program> {
-    let transformed_fields_program =
-        relay_resolvers_fields_transform(project_name, program, enabled)?;
+pub fn relay_resolvers(project_name: ProjectName, program: &Program) -> DiagnosticsResult<Program> {
+    let transformed_fields_program = relay_resolvers_fields_transform(project_name, program)?;
     relay_resolvers_spread_transform(&transformed_fields_program)
 }
 
@@ -112,6 +110,12 @@ pub enum FragmentDataInjectionMode {
     Field { name: StringKey, is_required: bool }, // TODO: Add Support for FullData
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ResolverSchemaGenType {
+    ResolverModule,
+    PropertyLookup { property_name: StringKey },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct RelayResolverFieldMetadata {
     field_parent_type: StringKey,
@@ -122,12 +126,14 @@ struct RelayResolverFieldMetadata {
     field_path: StringKey,
     live: bool,
     output_type_info: ResolverOutputTypeInfo,
+    type_confirmed: bool,
+    resolver_type: ResolverSchemaGenType,
 }
 associated_data_impl!(RelayResolverFieldMetadata);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RelayResolverMetadata {
-    field_id: FieldID,
+    pub field_id: FieldID,
     pub import_path: StringKey,
     pub import_name: Option<StringKey>,
     pub field_alias: Option<StringKey>,
@@ -141,6 +147,8 @@ pub struct RelayResolverMetadata {
         WithLocation<FragmentDefinitionName>,
         FragmentDataInjectionMode,
     )>,
+    pub type_confirmed: bool,
+    pub resolver_type: ResolverSchemaGenType,
 }
 associated_data_impl!(RelayResolverMetadata);
 
@@ -166,20 +174,10 @@ impl RelayResolverMetadata {
     }
 
     pub fn generate_local_resolver_name(&self, schema: &SDLSchema) -> StringKey {
-        to_camel_case(format!(
-            "{}_{}_resolver",
-            self.field_parent_type_name(schema),
-            self.field_name(schema)
-        ))
-        .intern()
+        resolver_import_alias(self.field_parent_type_name(schema), self.field_name(schema))
     }
     pub fn generate_local_resolver_type_name(&self, schema: &SDLSchema) -> StringKey {
-        to_camel_case(format!(
-            "{}_{}_resolver_type",
-            self.field_parent_type_name(schema),
-            self.field_name(schema)
-        ))
-        .intern()
+        resolver_type_import_alias(self.field_parent_type_name(schema), self.field_name(schema))
     }
 }
 
@@ -226,11 +224,8 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                     .expect("Previous validation passes ensured this exists.")
             });
 
-            let (fragment_arguments, field_arguments) = field
-                .arguments()
-                .iter()
-                .map(|arg| arg.clone())
-                .partition(|arg| {
+            let (fragment_arguments, field_arguments) =
+                field.arguments().iter().cloned().partition(|arg| {
                     if let Some(fragment_definition) = fragment_definition {
                         fragment_definition
                             .variable_definitions
@@ -266,6 +261,8 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                             *injection_mode,
                         )
                     }),
+                type_confirmed: field_metadata.type_confirmed,
+                resolver_type: field_metadata.resolver_type,
             };
 
             let mut new_directives: Vec<Directive> = vec![resolver_metadata.into()];
@@ -279,6 +276,12 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                 Selection::FragmentSpread(Arc::new(FragmentSpread {
                     fragment: fragment_definition.name,
                     arguments: fragment_arguments,
+                    signature: Some(FragmentSignature {
+                        name: fragment_definition.name,
+                        variable_definitions: fragment_definition.variable_definitions.clone(),
+                        type_condition: fragment_definition.type_condition,
+                        directives: fragment_definition.directives.clone(),
+                    }),
                     directives: new_directives,
                 }))
             } else {
@@ -293,7 +296,7 @@ impl<'program> RelayResolverSpreadTransform<'program> {
     }
 }
 
-impl<'program> Transformer for RelayResolverSpreadTransform<'program> {
+impl<'program> Transformer<'_> for RelayResolverSpreadTransform<'program> {
     const NAME: &'static str = "RelayResolversSpreadTransform";
     const VISIT_ARGUMENTS: bool = false;
     const VISIT_DIRECTIVES: bool = false;
@@ -319,7 +322,7 @@ impl<'program> Transformer for RelayResolverSpreadTransform<'program> {
         match ClientEdgeMetadata::find(fragment) {
             Some(client_edge_metadata) => {
                 let backing_id_field = self
-                    .transform_selection(&client_edge_metadata.backing_field)
+                    .transform_selection(client_edge_metadata.backing_field)
                     .unwrap_or_else(|| client_edge_metadata.backing_field.clone());
 
                 let selections_field = self
@@ -352,9 +355,8 @@ impl<'program> Transformer for RelayResolverSpreadTransform<'program> {
 fn relay_resolvers_fields_transform(
     project_name: ProjectName,
     program: &Program,
-    enabled: bool,
 ) -> DiagnosticsResult<Program> {
-    let mut transform = RelayResolverFieldTransform::new(project_name, program, enabled);
+    let mut transform = RelayResolverFieldTransform::new(project_name, program);
     let next_program = transform
         .transform_program(program)
         .replace_or_else(|| program.clone());
@@ -368,17 +370,15 @@ fn relay_resolvers_fields_transform(
 
 struct RelayResolverFieldTransform<'program> {
     project_name: ProjectName,
-    enabled: bool,
     program: &'program Program,
     errors: Vec<Diagnostic>,
     path: Vec<&'program str>,
 }
 
 impl<'program> RelayResolverFieldTransform<'program> {
-    fn new(project_name: ProjectName, program: &'program Program, enabled: bool) -> Self {
+    fn new(project_name: ProjectName, program: &'program Program) -> Self {
         Self {
             program,
-            enabled,
             errors: Default::default(),
             path: Vec::new(),
             project_name,
@@ -397,13 +397,6 @@ impl<'program> RelayResolverFieldTransform<'program> {
             field.definition().location,
         )
         .and_then(|info| {
-            if !self.enabled {
-                self.errors.push(Diagnostic::error(
-                    ValidationMessage::RelayResolversDisabled,
-                    field.alias_or_name_location(),
-                ));
-                return None;
-            }
             match info {
                 Ok(ResolverInfo {
                     fragment_name,
@@ -412,6 +405,8 @@ impl<'program> RelayResolverFieldTransform<'program> {
                     live,
                     has_output_type,
                     fragment_data_injection_mode,
+                    type_confirmed,
+                    resolver_type,
                 }) => {
                     let mut non_required_directives =
                         field.directives().iter().filter(|directive| {
@@ -424,7 +419,7 @@ impl<'program> RelayResolverFieldTransform<'program> {
                     if let Some(directive) = non_required_directives.next() {
                         self.errors.push(Diagnostic::error(
                             ValidationMessage::RelayResolverUnexpectedDirective,
-                            directive.name.location,
+                            directive.location,
                         ));
                     }
 
@@ -477,7 +472,7 @@ impl<'program> RelayResolverFieldTransform<'program> {
                                         // This is expect to be `__relay_model_instance`
                                         // TODO: Add validation/panic to assert that weak object has only
                                         // one field here, and it's a magic relay instance field.
-                                        Some(*object.fields.get(0).unwrap())
+                                        Some(*object.fields.first().unwrap())
                                     } else {
                                         None
                                     }
@@ -509,6 +504,8 @@ impl<'program> RelayResolverFieldTransform<'program> {
                         live,
                         output_type_info,
                         fragment_data_injection_mode,
+                        type_confirmed,
+                        resolver_type,
                     };
 
                     let mut directives: Vec<Directive> = field.directives().to_vec();
@@ -527,7 +524,7 @@ impl<'program> RelayResolverFieldTransform<'program> {
     }
 }
 
-impl Transformer for RelayResolverFieldTransform<'_> {
+impl Transformer<'_> for RelayResolverFieldTransform<'_> {
     const NAME: &'static str = "RelayResolversFieldTransform";
     const VISIT_ARGUMENTS: bool = false;
     const VISIT_DIRECTIVES: bool = false;
@@ -584,7 +581,7 @@ impl Transformer for RelayResolverFieldTransform<'_> {
         let transformed = match ClientEdgeMetadata::find(fragment) {
             Some(client_edge_metadata) => {
                 let backing_id_field = self
-                    .transform_selection(&client_edge_metadata.backing_field)
+                    .transform_selection(client_edge_metadata.backing_field)
                     .unwrap_or_else(|| client_edge_metadata.backing_field.clone());
 
                 let field_name = client_edge_metadata
@@ -617,16 +614,19 @@ impl Transformer for RelayResolverFieldTransform<'_> {
     }
 }
 
-struct ResolverInfo {
+#[derive(Debug)]
+pub struct ResolverInfo {
     fragment_name: Option<FragmentDefinitionName>,
     fragment_data_injection_mode: Option<FragmentDataInjectionMode>,
-    import_path: StringKey,
-    import_name: Option<StringKey>,
+    pub import_path: StringKey,
+    pub import_name: Option<StringKey>,
     live: bool,
     has_output_type: bool,
+    type_confirmed: bool,
+    resolver_type: ResolverSchemaGenType,
 }
 
-fn get_resolver_info(
+pub fn get_resolver_info(
     schema: &SDLSchema,
     resolver_field: &Field,
     error_location: Location,
@@ -656,6 +656,15 @@ fn get_resolver_info(
                 error_location,
             )
             .ok();
+            let type_confirmed =
+                get_bool_argument_is_true(arguments, *TYPE_CONFIRMED_ARGUMENT_NAME);
+            let resolver_type =
+                match get_argument_value(arguments, *RESOLVER_PROPERTY_LOOKUP_NAME, error_location)
+                    .ok()
+                {
+                    Some(property_name) => ResolverSchemaGenType::PropertyLookup { property_name },
+                    None => ResolverSchemaGenType::ResolverModule,
+                };
 
             Ok(ResolverInfo {
                 fragment_name,
@@ -685,6 +694,8 @@ fn get_resolver_info(
                         is_required: schema.field(injected_field_id).type_.is_non_null(),
                     }
                 }),
+                type_confirmed,
+                resolver_type,
             })
         })
 }
@@ -776,4 +787,11 @@ fn to_camel_case(non_camelized_string: String) -> String {
         }
     }
     camelized_string
+}
+
+pub fn resolver_import_alias(parent_type_name: StringKey, field_name: StringKey) -> StringKey {
+    to_camel_case(format!("{}_{}_resolver", parent_type_name, field_name,)).intern()
+}
+pub fn resolver_type_import_alias(parent_type_name: StringKey, field_name: StringKey) -> StringKey {
+    to_camel_case(format!("{}_{}_resolver_type", parent_type_name, field_name,)).intern()
 }

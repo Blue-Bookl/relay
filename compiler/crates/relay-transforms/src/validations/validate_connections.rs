@@ -295,7 +295,7 @@ impl<'s> ConnectionValidation<'s> {
         )?;
 
         let page_info_type = page_info_type.inner();
-        let page_info_sub_fields = vec![
+        let page_info_sub_fields = [
             self.connection_interface.end_cursor,
             self.connection_interface.has_next_page,
             self.connection_interface.has_previous_page,
@@ -461,7 +461,7 @@ impl<'s> ConnectionValidation<'s> {
                         connection_field_name: connection_schema_field.name.item,
                         key_arg_name: *KEY_ARG_NAME,
                     },
-                    connection_directive.name.location,
+                    connection_directive.location,
                 )]);
             }
         }

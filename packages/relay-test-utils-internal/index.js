@@ -28,6 +28,7 @@ const {
   FIXTURE_TAG,
   generateTestsFromFixtures,
 } = require('./generateTestsFromFixtures');
+const injectPromisePolyfill__DEPRECATED = require('./injectPromisePolyfill__DEPRECATED');
 const Matchers = require('./Matchers');
 const printAST = require('./printAST');
 const simpleClone = require('./simpleClone');
@@ -56,6 +57,14 @@ function cannotReadPropertyOfUndefined__DEPRECATED(
   return `Cannot read properties of undefined (reading '${propertyName}')`;
 }
 
+function skipIf(condition: string | void, ...args: Array<any>) {
+  const testName = args.length > 0 ? args[0] : 'N/A';
+  console.warn(
+    `The test "${testName}" is being skipped in open source. TODO: T192916613`,
+  );
+  condition === 'true' ? test.skip(...args) : test(...args);
+}
+
 /**
  * The public interface to Relay Test Utils.
  */
@@ -69,17 +78,19 @@ module.exports = {
   expectConsoleError,
   expectConsoleErrorsMany,
   expectConsoleErrorWillFire,
-  expectConsoleWarningWillFire,
   expectConsoleWarning,
   expectConsoleWarningsMany,
+  expectConsoleWarningWillFire,
   expectToWarn,
   expectToWarnMany,
   expectWarningWillFire,
   FIXTURE_TAG,
   generateTestsFromFixtures,
+  injectPromisePolyfill__DEPRECATED,
   matchers: Matchers,
   printAST,
   simpleClone,
+  skipIf,
   trackRetentionForEnvironment,
   unwrapContainer,
 };

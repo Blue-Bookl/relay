@@ -6,7 +6,7 @@
  *
  * @oncall relay
  *
- * @generated SignedSource<<764e5e48fe16a54ff03a9bb268e9f37a>>
+ * @generated SignedSource<<b5beed58738d8ebc11a485d845991b6a>>
  * @flow
  * @lightSyntaxTransform
  * @nogrep
@@ -21,18 +21,21 @@ import type { Fragment, ReaderFragment } from 'relay-runtime';
 import type { UserGreetingResolver$key } from "./UserGreetingResolver.graphql";
 import type { FragmentType } from "relay-runtime";
 import {greeting as userGreetingResolverType} from "../UserGreetingResolver.js";
+import type { TestResolverContextType } from "../../../../mutations/__tests__/TestResolverContextType";
 // Type assertion validating that `userGreetingResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
 (userGreetingResolverType: (
   rootKey: UserGreetingResolver$key,
-) => ?mixed);
+  args: void,
+  context: TestResolverContextType,
+) => ?string);
 declare export opaque type UserBestFriendShoutedGreetingResolver$fragmentType: FragmentType;
 export type UserBestFriendShoutedGreetingResolver$data = {|
   +friends: ?{|
     +edges: ?$ReadOnlyArray<?{|
       +cursor: ?string,
       +node: ?{|
-        +greeting: ?ReturnType<typeof userGreetingResolverType>,
+        +greeting: ?string,
       |},
     |}>,
   |},

@@ -49,6 +49,7 @@ const {
   LINKED_HANDLE,
   MODULE_IMPORT,
   RELAY_RESOLVER,
+  RELAY_LIVE_RESOLVER,
   SCALAR_FIELD,
   SCALAR_HANDLE,
   STREAM,
@@ -70,7 +71,7 @@ type Traversable = {
   +args: ?{[string]: mixed, ...},
 };
 type MockData = {[string]: mixed, ...};
-type MockResolverContext = {
+export type MockResolverContext = {
   +parentType: ?string,
   +name: ?string,
   +alias: ?string,
@@ -170,10 +171,10 @@ function createValueResolver(mockResolvers: ?MockResolvers): ValueResolver {
 
 function generateMockList<T>(
   placeholderArray: $ReadOnlyArray<mixed>,
-  generateListItem: (defaultValue: mixed) => T,
+  generateListItem: (defaultValue: mixed, index?: number) => T,
 ): $ReadOnlyArray<T> {
-  return placeholderArray.map(possibleDefaultValue =>
-    generateListItem(possibleDefaultValue),
+  return placeholderArray.map((possibleDefaultValue, index) =>
+    generateListItem(possibleDefaultValue, index),
   );
 }
 
@@ -208,7 +209,7 @@ class RelayMockPayloadGenerator {
   generate(
     selections: $ReadOnlyArray<NormalizationSelection>,
     operationType: string,
-  ): GraphQLResponse {
+  ): Array<GraphQLSingularResponse> {
     const defaultValues = this._getDefaultValuesForObject(
       operationType,
       null,
@@ -310,10 +311,20 @@ class RelayMockPayloadGenerator {
           if (!this._mockClientData) {
             break;
           }
-        // falls through
+          mockData = this._traverseSelections(
+            selection.selections,
+            typeName,
+            isAbstractType,
+            path,
+            mockData,
+            defaultValues,
+          );
+          break;
         case DEFER:
         case STREAM: {
-          if (this._generateDeferredPayload) {
+          const isDeferreable =
+            selection.if == null || this._variables[selection.if];
+          if (this._generateDeferredPayload && isDeferreable) {
             const deferredData = this._traverseSelections(
               selection.selections,
               typeName,
@@ -375,6 +386,15 @@ class RelayMockPayloadGenerator {
         case INLINE_FRAGMENT: {
           const {abstractKey} = selection;
           if (abstractKey != null) {
+            // Allow mocking of this inline fragment to be skipped by including
+            // a field like "__isNamed: false" in the mock data (e.g. to write
+            // tests for queries that use @alias).
+            const shouldMockFragment =
+              defaultValues?.[abstractKey] === undefined ||
+              !!defaultValues?.[abstractKey];
+            if (!shouldMockFragment) {
+              break;
+            }
             if (mockData != null) {
               mockData[abstractKey] = true;
             }
@@ -516,7 +536,9 @@ class RelayMockPayloadGenerator {
             mockData = {
               ...mockData,
               [TYPENAME_KEY]: typeName,
+              // $FlowFixMe[invalid-computed-prop]
               [getModuleOperationKey(documentName)]: operation.name,
+              // $FlowFixMe[invalid-computed-prop]
               [getModuleComponentKey(documentName)]:
                 defaultValues.__module_component,
               ...this._traverseSelections(
@@ -525,7 +547,7 @@ class RelayMockPayloadGenerator {
                 false,
                 path,
                 null,
-                null,
+                defaultValues,
               ),
             };
           }
@@ -541,6 +563,7 @@ class RelayMockPayloadGenerator {
           break;
         case ACTOR_CHANGE:
           throw new Error('ActorChange fields are not yet supported.');
+        case RELAY_LIVE_RESOLVER:
         case RELAY_RESOLVER:
           if (selection.fragment) {
             mockData = this._traverseSelections(
@@ -729,9 +752,7 @@ class RelayMockPayloadGenerator {
     // We will pass this data down to selection, so _mockScalar(...) can use
     // values from `defaults`
     const selectionPath = [...path, applicationName];
-    const typeFromSelection = this._selectionMetadata[
-      selectionPath.join('.')
-    ] ?? {
+    const typeFromSelection = this._getTypeDetailsForPath(selectionPath) ?? {
       type: DEFAULT_MOCK_TYPENAME,
     };
 
@@ -765,13 +786,19 @@ class RelayMockPayloadGenerator {
     const isAbstractType =
       field.concreteType == null && typeName === typeFromSelection.type;
 
-    const generateDataForField = (possibleDefaultValue: mixed) => {
+    const generateDataForField = (
+      possibleDefaultValue: mixed,
+      index?: number,
+    ) => {
+      const fieldPath = field.plural
+        ? [...selectionPath, index?.toString(10) ?? '0']
+        : selectionPath;
       const fieldDefaultValue =
         this._getDefaultValuesForObject(
           field.concreteType ?? typeFromSelection.type,
           field.name,
           field.alias,
-          selectionPath,
+          fieldPath,
           args,
         ) ?? possibleDefaultValue;
 
@@ -787,7 +814,7 @@ class RelayMockPayloadGenerator {
           alias: field.alias,
           args,
         },
-        [...path, applicationName],
+        fieldPath,
         typeof data[applicationName] === 'object'
           ? // $FlowFixMe[incompatible-variance]
             data[applicationName]
@@ -901,13 +928,28 @@ class RelayMockPayloadGenerator {
     +nullable: boolean,
   } {
     return (
-      this._selectionMetadata[selectionPath.join('.')] ?? {
+      this._getTypeDetailsForPath(selectionPath) ?? {
         type: field.name === 'id' ? 'ID' : 'String',
         plural: false,
         enumValues: null,
         nullable: false,
       }
     );
+  }
+
+  /**
+   * When selecting metadata, skip the number on plural fields so that every field in the array
+   * gets the same metadata.
+   * @private
+   */
+  _getTypeDetailsForPath(
+    path: $ReadOnlyArray<string>,
+  ): $Values<SelectionMetadata> {
+    return this._selectionMetadata[
+      // When selecting metadata, skip the number on plural fields so that every field in the array
+      // gets the same metadata.
+      path.filter(field => isNaN(parseInt(field, 10))).join('.')
+    ];
   }
 }
 
@@ -920,7 +962,7 @@ function generateData(
   mockResolvers: MockResolvers | null,
   selectionMetadata: SelectionMetadata | null,
   options: ?{mockClientData?: boolean, generateDeferredPayload?: boolean},
-): GraphQLResponse {
+): Array<GraphQLSingularResponse> {
   const mockGenerator = new RelayMockPayloadGenerator({
     variables,
     mockResolvers,

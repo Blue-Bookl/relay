@@ -11,23 +11,21 @@
 
 'use strict';
 
+import type {TestResolverContextType} from '../../../mutations/__tests__/TestResolverContextType';
 import type {TodoModelCapitalizedID$key} from './__generated__/TodoModelCapitalizedID.graphql';
 import type {TodoModelCapitalizedIDLegacy$key} from './__generated__/TodoModelCapitalizedIDLegacy.graphql';
 import type {TodoDescription} from './TodoDescription';
 import type {ConcreteClientEdgeResolverReturnType} from 'relay-runtime';
+import type {LiveState} from 'relay-runtime';
 import type {TodoItem} from 'relay-runtime/store/__tests__/resolvers/ExampleTodoStore';
-import type {LiveState} from 'relay-runtime/store/experimental-live-resolvers/LiveResolverStore';
 
 const {readFragment} = require('../../ResolverFragments');
 const {createTodoDescription} = require('./TodoDescription');
-const {graphql} = require('relay-runtime');
+const {graphql, suspenseSentinel} = require('relay-runtime');
 const {
   Selectors,
   TODO_STORE,
 } = require('relay-runtime/store/__tests__/resolvers/ExampleTodoStore');
-const {
-  suspenseSentinel,
-} = require('relay-runtime/store/experimental-live-resolvers/LiveResolverSuspenseSentinel');
 
 type TodoModelType = ?TodoItem;
 
@@ -54,6 +52,17 @@ function description(model: TodoModelType): ?string {
 }
 
 /**
+ * @RelayResolver TodoModel.another_value_from_context: String
+ */
+function another_value_from_context(
+  model: TodoModelType,
+  _: mixed,
+  context: TestResolverContextType,
+): ?string {
+  return context?.greeting.myHello;
+}
+
+/**
  * @RelayResolver TodoModel.capitalized_id: String
  * @rootFragment TodoModelCapitalizedID
  *
@@ -72,9 +81,7 @@ function capitalized_id(key: TodoModelCapitalizedID$key): ?string {
 }
 
 /**
- * @RelayResolver
- * @fieldName capitalized_id_legacy
- * @onType TodoModel
+ * @RelayResolver TodoModel.capitalized_id_legacy: String
  * @rootFragment TodoModelCapitalizedIDLegacy
  *
  * Like `capitalized_id`, but implemented using the non-terse legacy syntax
@@ -139,6 +146,19 @@ function many_fancy_descriptions(
 }
 
 /**
+ * @RelayResolver TodoModel.many_fancy_descriptions_but_some_are_null: [TodoDescription]
+ */
+function many_fancy_descriptions_but_some_are_null(
+  model: TodoModelType,
+): $ReadOnlyArray<TodoDescription | null> {
+  if (model == null) {
+    return [];
+  }
+
+  return [createTodoDescription(model.description, model.isCompleted), null];
+}
+
+/**
  * @RelayResolver Query.todo_model_null: TodoModel
  */
 function todo_model_null(): ?ConcreteClientEdgeResolverReturnType<> {
@@ -172,9 +192,11 @@ module.exports = {
   todo_model_null,
   TodoModel,
   description,
+  another_value_from_context,
   fancy_description,
   fancy_description_null,
   fancy_description_suspends,
   many_fancy_descriptions,
+  many_fancy_descriptions_but_some_are_null,
   live_todo_description,
 };

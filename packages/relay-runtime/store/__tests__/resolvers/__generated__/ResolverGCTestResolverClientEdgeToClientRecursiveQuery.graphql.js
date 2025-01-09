@@ -6,7 +6,7 @@
  *
  * @oncall relay
  *
- * @generated SignedSource<<5913ee23d3b454b8b62030303cd8ffbd>>
+ * @generated SignedSource<<b5352e3799ffad01bfde6e88018d850d>>
  * @flow
  * @lightSyntaxTransform
  * @nogrep
@@ -23,16 +23,21 @@ import type { AstrologicalSignNameResolver$key } from "./AstrologicalSignNameRes
 import type { AstrologicalSignOppositeResolver$key } from "./AstrologicalSignOppositeResolver.graphql";
 import type { UserAstrologicalSignResolver$key } from "./UserAstrologicalSignResolver.graphql";
 import {name as astrologicalSignNameResolverType} from "../AstrologicalSignNameResolver.js";
+import type { TestResolverContextType } from "../../../../mutations/__tests__/TestResolverContextType";
 // Type assertion validating that `astrologicalSignNameResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
 (astrologicalSignNameResolverType: (
   rootKey: AstrologicalSignNameResolver$key,
-) => ?mixed);
+  args: void,
+  context: TestResolverContextType,
+) => ?string);
 import {opposite as astrologicalSignOppositeResolverType} from "../AstrologicalSignOppositeResolver.js";
 // Type assertion validating that `astrologicalSignOppositeResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
 (astrologicalSignOppositeResolverType: (
   rootKey: AstrologicalSignOppositeResolver$key,
+  args: void,
+  context: TestResolverContextType,
 ) => ?{|
   +id: DataID,
 |});
@@ -41,6 +46,8 @@ import {astrological_sign as userAstrologicalSignResolverType} from "../UserAstr
 // A type error here indicates that the type signature of the resolver module is incorrect.
 (userAstrologicalSignResolverType: (
   rootKey: UserAstrologicalSignResolver$key,
+  args: void,
+  context: TestResolverContextType,
 ) => ?{|
   +id: DataID,
 |});
@@ -48,9 +55,9 @@ export type ResolverGCTestResolverClientEdgeToClientRecursiveQuery$variables = {
 export type ResolverGCTestResolverClientEdgeToClientRecursiveQuery$data = {|
   +me: ?{|
     +astrological_sign: ?{|
-      +name: ?ReturnType<typeof astrologicalSignNameResolverType>,
+      +name: ?string,
       +opposite: ?{|
-        +name: ?ReturnType<typeof astrologicalSignNameResolverType>,
+        +name: ?string,
       |},
     |},
   |},
@@ -90,7 +97,7 @@ v2 = {
       },
       "kind": "RelayResolver",
       "storageKey": null,
-      "isOutputType": false
+      "isOutputType": true
     }
   ],
   "type": "AstrologicalSign",
@@ -102,7 +109,7 @@ v3 = {
   "fragment": (v2/*: any*/),
   "kind": "RelayResolver",
   "storageKey": null,
-  "isOutputType": false
+  "isOutputType": true
 };
 return {
   "fragment": {
@@ -124,6 +131,7 @@ return {
           {
             "kind": "ClientEdgeToClientObject",
             "concreteType": "AstrologicalSign",
+            "modelResolvers": null,
             "backingField": {
               "alias": null,
               "args": null,
@@ -157,6 +165,7 @@ return {
                 {
                   "kind": "ClientEdgeToClientObject",
                   "concreteType": "AstrologicalSign",
+                  "modelResolvers": null,
                   "backingField": {
                     "alias": null,
                     "args": null,

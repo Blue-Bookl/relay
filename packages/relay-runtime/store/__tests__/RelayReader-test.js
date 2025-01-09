@@ -268,7 +268,6 @@ describe('RelayReader', () => {
           {},
       },
       __fragmentOwner: owner.request,
-      __isWithinUnmatchedTypeRefinement: false,
     });
     expect(data.__fragmentOwner).toBe(owner.request);
     expect(Array.from(seenRecords.values()).sort()).toEqual(['1']);
@@ -315,7 +314,6 @@ describe('RelayReader', () => {
           },
       },
       __fragmentOwner: owner.request,
-      __isWithinUnmatchedTypeRefinement: false,
     });
     expect(Array.from(seenRecords.values()).sort()).toEqual(['1']);
   });
@@ -359,7 +357,6 @@ describe('RelayReader', () => {
           },
       },
       __fragmentOwner: owner.request,
-      __isWithinUnmatchedTypeRefinement: false,
     });
     expect(Array.from(seenRecords.values()).sort()).toEqual(['1']);
   });
@@ -409,6 +406,13 @@ describe('RelayReader', () => {
   });
 
   it('reads data when the root is deleted', () => {
+    const UserQuery = graphql`
+      query RelayReaderTestReadsDataWhenTheRootIsDeletedQuery {
+        me {
+          ...RelayReaderTestReadsDataWhenTheRootIsDeletedUserProfile
+        }
+      }
+    `;
     const UserProfile = graphql`
       fragment RelayReaderTestReadsDataWhenTheRootIsDeletedUserProfile on User {
         name
@@ -416,24 +420,33 @@ describe('RelayReader', () => {
     `;
     source = RelayRecordSource.create();
     source.delete('4');
+    const owner = createOperationDescriptor(UserQuery, {});
     const {data, seenRecords} = read(
       source,
-      createReaderSelector(UserProfile, '4', {}),
+      createReaderSelector(UserProfile, '4', {}, owner.request),
     );
     expect(data).toBe(null);
     expect(Array.from(seenRecords.values()).sort()).toEqual(['4']);
   });
 
   it('reads data when the root is unfetched', () => {
+    const UserQuery = graphql`
+      query RelayReaderTestReadsDataWhenTheRootIsUnfetchedQuery {
+        me {
+          ...RelayReaderTestReadsDataWhenTheRootIsDeletedUserProfile
+        }
+      }
+    `;
     const UserProfile = graphql`
       fragment RelayReaderTestReadsDataWhenTheRootIsUnfetchedUserProfile on User {
         name
       }
     `;
     source = RelayRecordSource.create();
+    const owner = createOperationDescriptor(UserQuery, {});
     const {data, seenRecords} = read(
       source,
-      createReaderSelector(UserProfile, '4', {}),
+      createReaderSelector(UserProfile, '4', {}, owner.request),
     );
     expect(data).toBe(undefined);
     expect(Array.from(seenRecords.values()).sort()).toEqual(['4']);
@@ -491,9 +504,15 @@ describe('RelayReader', () => {
         }
       }
     `;
+    const owner = createOperationDescriptor(UserFriends, {id: '1'});
     const {data, seenRecords} = read(
       source,
-      createReaderSelector(UserFriends.fragment, ROOT_ID, {id: '1'}),
+      createReaderSelector(
+        UserFriends.fragment,
+        ROOT_ID,
+        {id: '1'},
+        owner.request,
+      ),
     );
     expect(data).toEqual({
       node: {
@@ -547,6 +566,13 @@ describe('RelayReader', () => {
       },
     };
     source = RelayRecordSource.create(records);
+    const UserQuery = graphql`
+      query RelayReaderTestReadsHandleFieldsForFragmentsUserFriendsQuery {
+        me {
+          ...RelayReaderTestReadsHandleFieldsForFragmentsUserFriends
+        }
+      }
+    `;
     const UserFriends = graphql`
       fragment RelayReaderTestReadsHandleFieldsForFragmentsUserFriends on User {
         friends(first: 1) @__clientField(handle: "bestFriends") {
@@ -560,9 +586,10 @@ describe('RelayReader', () => {
         }
       }
     `;
+    const owner = createOperationDescriptor(UserQuery, {});
     const {data, seenRecords} = read(
       source,
-      createReaderSelector(UserFriends, '1', {}),
+      createReaderSelector(UserFriends, '1', {}, owner.request),
     );
     expect(data).toEqual({
       friends: {
@@ -664,7 +691,6 @@ describe('RelayReader', () => {
               {},
           },
           __fragmentOwner: owner.request,
-          __isWithinUnmatchedTypeRefinement: false,
           __fragmentPropName: 'name',
           __module_component: 'PlainUserNameRenderer.react',
         },
@@ -717,7 +743,6 @@ describe('RelayReader', () => {
               {},
           },
           __fragmentOwner: owner.request,
-          __isWithinUnmatchedTypeRefinement: false,
           __fragmentPropName: 'name',
           __module_component: 'MarkdownUserNameRenderer.react',
         },
@@ -751,9 +776,10 @@ describe('RelayReader', () => {
         },
       };
       source = RelayRecordSource.create(storeData);
+      const owner = createOperationDescriptor(BarQuery, {});
       const {data, seenRecords, isMissingData} = read(
         source,
-        createReaderSelector(BarFragment, '1', {}),
+        createReaderSelector(BarFragment, '1', {}, owner.request),
       );
       expect(data).toEqual({
         id: '1',
@@ -781,9 +807,10 @@ describe('RelayReader', () => {
         },
       };
       source = RelayRecordSource.create(storeData);
+      const owner = createOperationDescriptor(BarQuery, {});
       const {data, seenRecords, isMissingData} = read(
         source,
-        createReaderSelector(BarFragment, '1', {}),
+        createReaderSelector(BarFragment, '1', {}, owner.request),
       );
       expect(data).toEqual({
         id: '1',
@@ -807,9 +834,10 @@ describe('RelayReader', () => {
         },
       };
       source = RelayRecordSource.create(storeData);
+      const owner = createOperationDescriptor(BarQuery, {});
       const {data, seenRecords, isMissingData} = read(
         source,
-        createReaderSelector(BarFragment, '1', {}),
+        createReaderSelector(BarFragment, '1', {}, owner.request),
       );
       expect(data).toEqual({
         id: '1',
@@ -900,7 +928,6 @@ describe('RelayReader', () => {
               {},
           },
           __fragmentOwner: owner.request,
-          __isWithinUnmatchedTypeRefinement: false,
           __fragmentPropName: 'name',
           __module_component: 'PlainUserNameRenderer.react',
         },
@@ -953,7 +980,6 @@ describe('RelayReader', () => {
               {},
           },
           __fragmentOwner: owner.request,
-          __isWithinUnmatchedTypeRefinement: false,
           __fragmentPropName: 'name',
           __module_component: 'MarkdownUserNameRenderer.react',
         },
@@ -1098,9 +1124,17 @@ describe('RelayReader', () => {
             }
           }
         `;
+        const UserQuery = graphql`
+          query RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingAddressQuery {
+            me {
+              ...RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingAddress
+            }
+          }
+        `;
+        const owner = createOperationDescriptor(UserQuery);
         const {data, isMissingData} = read(
           source,
-          createReaderSelector(Address, '1', {}),
+          createReaderSelector(Address, '1', {}, owner.request),
         );
         expect(data.id).toBe('1');
         expect(data.address).not.toBeDefined();
@@ -1116,11 +1150,24 @@ describe('RelayReader', () => {
             }
           }
         `;
+        const UserQuery = graphql`
+          query RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingVariablesProfilePictureQuery {
+            me {
+              id # Note that this does not include the fragment so the variable data should be missing
+            }
+          }
+        `;
+        const owner = createOperationDescriptor(UserQuery);
         const {data, isMissingData} = read(
           source,
-          createReaderSelector(ProfilePicture, '1', {
-            size: 48,
-          }),
+          createReaderSelector(
+            ProfilePicture,
+            '1',
+            {
+              size: 48,
+            },
+            owner.request,
+          ),
         );
         expect(data.id).toBe('1');
         expect(data.profilePicture).not.toBeDefined();
@@ -1199,6 +1246,14 @@ describe('RelayReader', () => {
       });
 
       it('should have `isMissingData = false` if data is available', () => {
+        const UserQuery = graphql`
+          query RelayReaderTestShouldHaveIsmissingdataFalseIfDataIsAvailableUserFriendsQuery {
+            me {
+              ...RelayReaderTestShouldHaveIsmissingdataFalseIfDataIsAvailableUserFriends
+            }
+          }
+        `;
+
         const UserFriends = graphql`
           fragment RelayReaderTestShouldHaveIsmissingdataFalseIfDataIsAvailableUserFriends on User {
             id
@@ -1212,9 +1267,12 @@ describe('RelayReader', () => {
             }
           }
         `;
+
+        const owner = createOperationDescriptor(UserQuery, {});
+
         const {data, isMissingData} = read(
           source,
-          createReaderSelector(UserFriends, '1', {}),
+          createReaderSelector(UserFriends, '1', {}, owner.request),
         );
         expect(data.friends.edges).toEqual([
           {
@@ -1235,6 +1293,14 @@ describe('RelayReader', () => {
       });
 
       it('should have `isMissingData = true` if data is missing in the node', () => {
+        const UserQuery = graphql`
+          query RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingInTheNodeUserFriendsQuery {
+            me {
+              ...RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingInTheNodeUserFriends
+            }
+          }
+        `;
+
         const UserFriends = graphql`
           fragment RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingInTheNodeUserFriends on User {
             id
@@ -1249,9 +1315,11 @@ describe('RelayReader', () => {
             }
           }
         `;
+
+        const owner = createOperationDescriptor(UserQuery, {});
         const {data, isMissingData} = read(
           source,
-          createReaderSelector(UserFriends, '1', {}),
+          createReaderSelector(UserFriends, '1', {}, owner.request),
         );
         expect(data.friends.edges).toEqual([
           {
@@ -1272,6 +1340,14 @@ describe('RelayReader', () => {
       });
 
       it('should have `isMissingData = true` if data is missing for connection', () => {
+        const UserQuery = graphql`
+          query RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingForConnectionUserFriendsQuery {
+            me {
+              ...RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingForConnectionUserFriends
+            }
+          }
+        `;
+
         const UserFriends = graphql`
           fragment RelayReaderTestShouldHaveIsmissingdataTrueIfDataIsMissingForConnectionUserFriends on User {
             id
@@ -1285,9 +1361,11 @@ describe('RelayReader', () => {
             }
           }
         `;
+
+        const owner = createOperationDescriptor(UserQuery, {});
         const {data, isMissingData} = read(
           source,
-          createReaderSelector(UserFriends, '2', {}),
+          createReaderSelector(UserFriends, '2', {}, owner.request),
         );
         expect(data.id).toBe('2');
         expect(data.friends.edges).not.toBeDefined();
@@ -1788,7 +1866,6 @@ describe('RelayReader', () => {
             __viewer: 'viewer-id',
             __fragmentRef: {
               __fragmentOwner: owner.request,
-              __isWithinUnmatchedTypeRefinement: false,
               __fragments: {
                 RelayReaderTestActorChangeFragment: {},
               },
