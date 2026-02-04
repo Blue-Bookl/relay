@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<c1d2b240120ccd3e463c1d4e274b1ce6>>
+ * @generated SignedSource<<6bb37b0783faddb3ea91a7a748b16b4d>>
  */
 
 mod relay_compiler_integration;
@@ -234,6 +234,13 @@ async fn preloadable_query_typescript() {
     let input = include_str!("relay_compiler_integration/fixtures/preloadable_query_typescript.input");
     let expected = include_str!("relay_compiler_integration/fixtures/preloadable_query_typescript.expected");
     test_fixture(transform_fixture, file!(), "preloadable_query_typescript.input", "relay_compiler_integration/fixtures/preloadable_query_typescript.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn refetchable_with_directive_enum_arg() {
+    let input = include_str!("relay_compiler_integration/fixtures/refetchable_with_directive_enum_arg.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/refetchable_with_directive_enum_arg.expected");
+    test_fixture(transform_fixture, file!(), "refetchable_with_directive_enum_arg.input", "relay_compiler_integration/fixtures/refetchable_with_directive_enum_arg.expected", input, expected).await;
 }
 
 #[tokio::test]

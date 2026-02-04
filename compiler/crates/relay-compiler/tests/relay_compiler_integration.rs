@@ -117,6 +117,7 @@ pub async fn transform_fixture(fixture: &Fixture<'_>) -> Result<String, String> 
 
 fn configure_test_config(mut config: Config) -> Config {
     config.file_source_config = FileSourceKind::WalkDir;
+    config.has_schema_change_incremental_build = true;
     config.create_operation_persister = Some(Box::new(|project_config| {
         project_config.persist.as_ref().map(
             |persist_config| -> Box<dyn OperationPersister + Send + Sync> {
