@@ -167,6 +167,14 @@ impl ProjectFixture {
         }
     }
 
+    /// Remove files by their keys from this ProjectFixture.
+    /// Useful for removing specific files without consuming another ProjectFixture.
+    pub fn remove_files_by_keys<'a>(&mut self, keys: impl Iterator<Item = &'a PathBuf>) {
+        for key in keys {
+            self.files.remove(key);
+        }
+    }
+
     /// Return files map
     pub fn files(&self) -> &FnvHashMap<PathBuf, String> {
         &self.files

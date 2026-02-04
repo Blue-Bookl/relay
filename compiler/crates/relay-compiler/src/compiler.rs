@@ -100,6 +100,47 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
         }
     }
 
+    /// Exposed for testing.
+    ///
+    /// Perform an incremental build using an existing compiler state.
+    ///
+    /// This method is useful for testing incremental compilation. The caller should:
+    /// 1. Push file source changes to `compiler_state.pending_file_source_changes`
+    /// 2. Call this method to merge changes and rebuild
+    pub async fn build_with_changed_files(&self, compiler_state: &mut CompilerState) -> Result<()> {
+        let setup_event = self.perf_logger.create_event("incremental_build");
+        self.config.status_reporter.build_starts();
+
+        let result: Result<Vec<Diagnostic>> = async {
+            let had_new_changes = compiler_state.merge_file_source_changes(
+                &self.config,
+                self.perf_logger.as_ref(),
+                false,
+            )?;
+
+            if had_new_changes {
+                self.build_projects(compiler_state, &setup_event).await
+            } else {
+                Ok(vec![])
+            }
+        }
+        .await;
+        setup_event.complete();
+
+        match result {
+            Ok(non_fatal_diagnostics) => {
+                self.config
+                    .status_reporter
+                    .build_completes(&non_fatal_diagnostics);
+                Ok(())
+            }
+            Err(error) => {
+                self.config.status_reporter.build_errors(&error);
+                Err(error)
+            }
+        }
+    }
+
     pub async fn watch(&self) -> Result<()> {
         'watch: loop {
             let setup_event = self.perf_logger.create_event("compiler_setup");
