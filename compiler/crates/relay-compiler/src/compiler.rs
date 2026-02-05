@@ -146,6 +146,11 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
             let setup_event = self.perf_logger.create_event("compiler_setup");
             let initial_watch_compile_timer = setup_event.start("initial_watch_compile");
             self.config.status_reporter.build_starts();
+
+            // Signal that the initial build is starting
+            if let Some(build_status) = &self.config.build_status {
+                build_status.changes_pending();
+            }
             let result: Result<(CompilerState, Arc<Notify>, JoinHandle<()>)> = async {
                 if let Some(initialize_resources) = &self.config.initialize_resources {
                     let timer = setup_event.start("load_resources");
@@ -215,10 +220,16 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                     match self.build_projects(&mut compiler_state, &setup_event).await {
                         Ok(diagnostics) => {
                             self.config.status_reporter.build_completes(&diagnostics);
+                            if let Some(build_status) = &self.config.build_status {
+                                build_status.build_completed();
+                            }
                         }
                         Err(err) => {
                             red_to_green.log_error();
                             self.config.status_reporter.build_errors(&err);
+                            if let Some(build_status) = &self.config.build_status {
+                                build_status.build_completed();
+                            }
                         }
                     };
                     setup_event.stop(initial_watch_compile_timer);
@@ -234,6 +245,10 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                 }
                 Err(err) => {
                     self.config.status_reporter.build_errors(&err);
+                    // Signal that the initial setup failed
+                    if let Some(build_status) = &self.config.build_status {
+                        build_status.build_completed();
+                    }
                     break 'watch Err(err);
                 }
             }
@@ -251,7 +266,16 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
         loop {
             notify_receiver.notified().await;
 
+            // Signal that changes have been detected and a build may occur
+            if let Some(build_status) = &self.config.build_status {
+                build_status.changes_pending();
+            }
+
             if compiler_state.source_control_update_status.is_started() {
+                // Clear pending changes since we're skipping this notification
+                if let Some(build_status) = &self.config.build_status {
+                    build_status.no_pending_changes();
+                }
                 continue;
             }
 
@@ -294,11 +318,17 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                     {
                         Ok(diagnostics) => {
                             self.config.status_reporter.build_completes(&diagnostics);
+                            if let Some(build_status) = &self.config.build_status {
+                                build_status.build_completed();
+                            }
                             red_to_green.clear_error_and_log(self.perf_logger.as_ref());
                         }
                         Err(err) => {
                             red_to_green.log_error();
                             self.config.status_reporter.build_errors(&err);
+                            if let Some(build_status) = &self.config.build_status {
+                                build_status.build_completed();
+                            }
                         }
                     }
 
@@ -306,6 +336,10 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                     info!("Watching for new changes...");
                 } else {
                     debug!("No new changes detected.");
+                    // Clear the pending changes flag since there were no actual changes
+                    if let Some(build_status) = &self.config.build_status {
+                        build_status.no_pending_changes();
+                    }
                     incremental_build_event.stop(incremental_build_time);
                 }
                 incremental_build_event.complete();
