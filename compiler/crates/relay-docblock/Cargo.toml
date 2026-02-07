@@ -29,7 +29,7 @@ relay-config = { path = "../relay-config" }
 relay-schema = { path = "../relay-schema" }
 schema = { path = "../schema" }
 serde = { version = "1.0.219", features = ["derive", "rc"] }
-thiserror = "2.0.12"
+thiserror = "2.0.18"
 
 [dev-dependencies]
 extract-graphql = { path = "../extract-graphql" }
