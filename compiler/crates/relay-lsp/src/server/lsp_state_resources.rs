@@ -637,6 +637,11 @@ impl<TPerfLogger: PerfLogger + 'static, TSchemaDocumentation: SchemaDocumentatio
                             }
                         }
                     }
+                    Ok(FileSourceSubscriptionNextChange::Test(_)) => {
+                        panic!(
+                            "LSP subscription should not be started with a test file watcher. Please use Watchman"
+                        );
+                    }
                 }
             }
         })

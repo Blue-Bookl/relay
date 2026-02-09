@@ -62,6 +62,7 @@ use serde::de::Error as DeError;
 use serde_json::Value;
 use sha1::Digest;
 use sha1::Sha1;
+use tokio::sync::Notify;
 use watchman_client::pdu::ScmAwareClockData;
 
 use crate::GraphQLAsts;
@@ -216,6 +217,38 @@ pub enum FileSourceKind {
     /// This can be used to replace watchman queries
     External(PathBuf),
     WalkDir,
+    /// Test file source for testing the daemon. Allows external test code to push
+    /// file changes and trigger builds without requiring Watchman.
+    Test(TestFileSourceConfig),
+}
+
+/// Configuration for test file source.
+///
+/// This enables testing of watch mode by allowing external code to trigger
+/// file rescans. When notified, the compiler does a WalkDir rescan to find
+/// what files changed.
+#[derive(Clone)]
+pub struct TestFileSourceConfig {
+    /// Shared notify used for signaling file changes
+    pub notify: Arc<Notify>,
+}
+
+impl TestFileSourceConfig {
+    pub fn new() -> Self {
+        Self {
+            notify: Arc::new(Notify::new()),
+        }
+    }
+
+    pub fn notify(&self) {
+        self.notify.notify_one();
+    }
+}
+
+impl Default for TestFileSourceConfig {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn normalize_path_from_config(

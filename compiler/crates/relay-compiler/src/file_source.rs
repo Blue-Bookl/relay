@@ -38,6 +38,7 @@ pub use read_file_to_string::read_file_to_string;
 use serde::Deserialize;
 use serde_bser::value::Value;
 pub use source_control_update_status::SourceControlUpdateStatus;
+use tokio::sync::Notify;
 pub use watchman_client::prelude::Clock;
 use watchman_file_source::WatchmanFileSource;
 
@@ -61,6 +62,16 @@ pub enum FileSource {
     Watchman(WatchmanFileSource),
     External(ExternalFileSource),
     WalkDir(WalkDirFileSource),
+    Test(TestFileSource),
+}
+
+/// Test file source for testing the daemon (watch mode) without Watchman.
+///
+/// This file source uses WalkDir for initial query and channel-based
+/// notifications for subscriptions, allowing tests control notification of file changes.
+pub struct TestFileSource {
+    config: Arc<Config>,
+    walk_dir_source: WalkDirFileSource,
 }
 
 impl FileSource {
@@ -78,6 +89,10 @@ impl FileSource {
             FileSourceKind::WalkDir => {
                 Ok(Self::WalkDir(WalkDirFileSource::new(Arc::clone(config))))
             }
+            FileSourceKind::Test(_) => Ok(Self::Test(TestFileSource {
+                config: Arc::clone(config),
+                walk_dir_source: WalkDirFileSource::new(Arc::clone(config)),
+            })),
         }
     }
 
@@ -108,6 +123,9 @@ impl FileSource {
                 }
             }
             Self::WalkDir(file_source) => file_source.create_compiler_state(perf_logger),
+            Self::Test(file_source) => file_source
+                .walk_dir_source
+                .create_compiler_state(perf_logger),
         }
     }
 
@@ -124,6 +142,26 @@ impl FileSource {
                 Ok((
                     compiler_state,
                     FileSourceSubscription::Watchman(watchman_subscription),
+                ))
+            }
+            Self::Test(file_source) => {
+                // Use WalkDir for initial state
+                let compiler_state = file_source
+                    .walk_dir_source
+                    .create_compiler_state(perf_logger)?;
+
+                let notify = match &file_source.config.file_source_config {
+                    FileSourceKind::Test(config) => Arc::clone(&config.notify),
+                    _ => unreachable!("TestFileSource must have FileSourceKind::Test config"),
+                };
+                let walk_dir_source = WalkDirFileSource::new(Arc::clone(&file_source.config));
+
+                Ok((
+                    compiler_state,
+                    FileSourceSubscription::Test(TestFileSourceSubscription {
+                        notify,
+                        walk_dir_source,
+                    }),
                 ))
             }
             Self::External(_) | Self::WalkDir(_) => {
@@ -191,7 +229,19 @@ impl FileSourceResult {
 }
 
 pub enum FileSourceSubscription {
-    Watchman(WatchmanFileSourceSubscription), // Oss(OssFileSourceSubscription)
+    Watchman(WatchmanFileSourceSubscription), // Oss(OssFileSourceSubscription),
+    Test(TestFileSourceSubscription),
+}
+
+/// Test file source subscription for watch mode testing.
+///
+/// This subscription waits on a Notify signal from tests, then does a
+/// WalkDir rescan to find what files changed. This allows tests to:
+/// 1. Write file changes to disk
+/// 2. Call `TestFileSourceConfig::notify()` to trigger a rescan and rebuild
+pub struct TestFileSourceSubscription {
+    notify: Arc<Notify>,
+    walk_dir_source: WalkDirFileSource,
 }
 
 impl FileSourceSubscription {
@@ -203,6 +253,12 @@ impl FileSourceSubscription {
                     |next_change| Ok(FileSourceSubscriptionNextChange::Watchman(next_change)),
                 )
             }
+            Self::Test(test_subscription) => {
+                test_subscription.notify.notified().await;
+                // Do a WalkDir rescan to find what files changed
+                let result = test_subscription.walk_dir_source.query_files()?;
+                Ok(FileSourceSubscriptionNextChange::Test(result))
+            }
         }
     }
 }
@@ -210,4 +266,6 @@ impl FileSourceSubscription {
 #[derive(Debug)]
 pub enum FileSourceSubscriptionNextChange {
     Watchman(WatchmanFileSourceSubscriptionNextChange),
+    /// Test file source notification with rescanned files
+    Test(WalkDirFileSourceResult),
 }

@@ -202,6 +202,13 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                                     WatchmanFileSourceSubscriptionNextChange::None => {}
                                 }
                             }
+                            Ok(FileSourceSubscriptionNextChange::Test(file_source_changes)) => {
+                                pending_file_source_changes
+                                    .write()
+                                    .unwrap()
+                                    .push(FileSourceResult::WalkDir(file_source_changes));
+                                notify_sender.notify_one();
+                            }
                             Err(err) => {
                                 panic!("Watchman subscription error: {err}");
                             }
