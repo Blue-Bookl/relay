@@ -5,108 +5,173 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use std::collections::HashSet;
+
 use common::Diagnostic;
 use common::DiagnosticsResult;
 use common::FeatureFlags;
-use common::NamedItem;
-use docblock_shared::RELAY_RESOLVER_DIRECTIVE_NAME;
-use docblock_shared::RETURN_FRAGMENT_ARGUMENT_NAME;
-use graphql_ir::FragmentDefinitionName;
+use graphql_ir::Field;
 use graphql_ir::Program;
-use graphql_syntax::ConstantValue;
+use graphql_ir::Transformed;
+use graphql_ir::Transformer;
 use graphql_syntax::is_valid_identifier;
 use intern::Lookup;
+use schema::FieldID;
 use schema::Schema;
 
 use super::ValidationMessage;
 use crate::extract_module_name;
+use crate::relay_resolvers::RelayResolverMetadata;
 
 /// Shadow resolvers transform.
 ///
-/// This transform handles shadow resolver-related processing and validation.
+/// This transform validates return_fragment on resolver fields that are actually
+/// used in operations/fragments. It uses the Transformer trait to visit fields
+/// and tracks which schema fields have been validated to avoid duplicate validation.
 pub fn shadow_resolvers_transform(
     program: &Program,
     feature_flags: &FeatureFlags,
 ) -> DiagnosticsResult<Program> {
-    let mut errors = Vec::new();
+    let mut transform = ShadowResolversTransform::new(program, feature_flags);
+    transform.transform_program(program);
 
-    // Iterate over all fields in the schema to find resolver fields with return_fragment
-    for field in program.schema.fields() {
-        // Check if this field has a @relay_resolver directive with return_fragment argument
-        if let Some(resolver_directive) = field.directives.named(*RELAY_RESOLVER_DIRECTIVE_NAME)
-            && let Some(return_fragment_arg) = resolver_directive
-                .arguments
-                .named(*RETURN_FRAGMENT_ARGUMENT_NAME)
-        {
-            // Use the location of the return_fragment argument value (the fragment name)
-            let location = field
-                .name
-                .location
-                .with_span(return_fragment_arg.value.span());
+    if transform.errors.is_empty() {
+        Ok(program.clone())
+    } else {
+        Err(transform.errors)
+    }
+}
 
-            // If the feature flag is not enabled, report error and skip other validations
-            if !feature_flags.enable_shadow_resolvers.is_fully_enabled() {
-                errors.push(Diagnostic::error(
-                    ValidationMessage::ReturnFragmentRequiresFeatureFlag,
-                    location,
-                ));
-                continue;
-            }
+struct ShadowResolversTransform<'program> {
+    program: &'program Program,
+    feature_flags: &'program FeatureFlags,
+    errors: Vec<Diagnostic>,
+    /// Track which resolver fields have been validated to avoid duplicate validation
+    validated_fields: HashSet<FieldID>,
+}
 
-            // Extract the fragment name string from the argument value
-            let fragment_name_str = match &return_fragment_arg.value {
-                ConstantValue::String(s) => s.value,
-                _ => continue, // Non-string values are handled elsewhere
-            };
-
-            // Validate: fragment name must be a valid GraphQL identifier
-            if !is_valid_identifier(fragment_name_str.lookup()) {
-                errors.push(Diagnostic::error(
-                    ValidationMessage::ReturnFragmentInvalidName {
-                        name: fragment_name_str,
-                    },
-                    location,
-                ));
-                continue;
-            }
-
-            // Validate: no fragment with this name should exist in the project
-            let fragment_def_name = FragmentDefinitionName(fragment_name_str);
-            if let Some(existing_fragment) = program.fragment(fragment_def_name) {
-                errors.push(
-                    Diagnostic::error(
-                        ValidationMessage::ReturnFragmentConflictsWithExistingFragment {
-                            name: fragment_name_str,
-                        },
-                        location,
-                    )
-                    .annotate(
-                        "existing fragment defined here",
-                        existing_fragment.name.location,
-                    ),
-                );
-            }
-
-            // Validate: fragment name must start with the module name (namespace rule)
-            let source_location = field.name.location.source_location();
-            if !source_location.is_generated()
-                && let Some(module_name) = extract_module_name(source_location.path())
-                && !fragment_name_str.lookup().starts_with(&module_name)
-            {
-                errors.push(Diagnostic::error(
-                    ValidationMessage::ReturnFragmentInvalidModuleName {
-                        module_name,
-                        fragment_name: fragment_name_str,
-                    },
-                    location,
-                ));
-            }
+impl<'program> ShadowResolversTransform<'program> {
+    fn new(program: &'program Program, feature_flags: &'program FeatureFlags) -> Self {
+        Self {
+            program,
+            feature_flags,
+            errors: Vec::new(),
+            validated_fields: HashSet::new(),
         }
     }
 
-    if errors.is_empty() {
-        Ok(program.clone())
-    } else {
-        Err(errors)
+    fn validate_resolver_directives(&mut self, directives: &[graphql_ir::Directive]) {
+        // Use RelayResolverMetadata::find to get metadata from IR directives
+        // Note: After relay_resolvers_spread_transform, resolver fields become either:
+        // - ScalarField for __id (for resolvers without root fragments)
+        // - FragmentSpread (for resolvers with root fragments)
+        // Both have RelayResolverMetadata attached to their directives.
+        let resolver_metadata = match RelayResolverMetadata::find(directives) {
+            Some(metadata) => metadata,
+            None => return,
+        };
+
+        // Use the field_id from the metadata (the original resolver field)
+        let field_id = resolver_metadata.field_id;
+
+        // Skip if already validated
+        if self.validated_fields.contains(&field_id) {
+            return;
+        }
+        self.validated_fields.insert(field_id);
+
+        // Check if this resolver has a return_fragment
+        let return_fragment = match &resolver_metadata.return_fragment {
+            Some(rf) => rf,
+            None => return,
+        };
+
+        // Location is available directly from return_fragment
+        let location = return_fragment.location;
+
+        // If the feature flag is not enabled, report error and skip other validations
+        if !self
+            .feature_flags
+            .enable_shadow_resolvers
+            .is_fully_enabled()
+        {
+            self.errors.push(Diagnostic::error(
+                ValidationMessage::ReturnFragmentRequiresFeatureFlag,
+                location,
+            ));
+            return;
+        }
+
+        // Validate: fragment name must be a valid GraphQL identifier
+        if !is_valid_identifier(return_fragment.item.lookup()) {
+            self.errors.push(Diagnostic::error(
+                ValidationMessage::ReturnFragmentInvalidName {
+                    name: return_fragment.item.0,
+                },
+                location,
+            ));
+            return;
+        }
+
+        // Validate: no fragment with this name should exist in the project
+        if let Some(existing_fragment) = self.program.fragment(return_fragment.item) {
+            self.errors.push(
+                Diagnostic::error(
+                    ValidationMessage::ReturnFragmentConflictsWithExistingFragment {
+                        name: return_fragment.item.0,
+                    },
+                    location,
+                )
+                .annotate(
+                    "existing fragment defined here",
+                    existing_fragment.name.location,
+                ),
+            );
+        }
+
+        // Validate: fragment name must start with the module name (namespace rule)
+        let schema_field = self.program.schema.field(field_id);
+        let source_location = schema_field.name.location.source_location();
+        if let Some(module_name) = extract_module_name(source_location.path())
+            && !return_fragment.item.lookup().starts_with(&module_name)
+        {
+            self.errors.push(Diagnostic::error(
+                ValidationMessage::ReturnFragmentInvalidModuleName {
+                    module_name,
+                    fragment_name: return_fragment.item.0,
+                },
+                location,
+            ));
+        }
+    }
+}
+
+impl Transformer<'_> for ShadowResolversTransform<'_> {
+    const NAME: &'static str = "ShadowResolversTransform";
+    const VISIT_ARGUMENTS: bool = false;
+    const VISIT_DIRECTIVES: bool = false;
+
+    fn transform_scalar_field(
+        &mut self,
+        field: &graphql_ir::ScalarField,
+    ) -> Transformed<graphql_ir::Selection> {
+        self.validate_resolver_directives(field.directives());
+        Transformed::Keep
+    }
+
+    fn transform_linked_field(
+        &mut self,
+        field: &graphql_ir::LinkedField,
+    ) -> Transformed<graphql_ir::Selection> {
+        self.validate_resolver_directives(field.directives());
+        self.default_transform_linked_field(field)
+    }
+
+    fn transform_fragment_spread(
+        &mut self,
+        spread: &graphql_ir::FragmentSpread,
+    ) -> Transformed<graphql_ir::Selection> {
+        self.validate_resolver_directives(&spread.directives);
+        Transformed::Keep
     }
 }

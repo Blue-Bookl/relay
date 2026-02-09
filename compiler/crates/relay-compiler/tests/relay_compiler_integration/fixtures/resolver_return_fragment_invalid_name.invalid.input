@@ -1,9 +1,14 @@
 //- User_foo.js
-// Test that @returnFragment requires fragment names to start with the module name.
+// Test that @returnFragment rejects invalid GraphQL identifiers.
 /**
  * @RelayResolver User.foo: RelayResolverValue
- * @returnFragment WrongPrefix_fragment
+ * @returnFragment 123InvalidName
  */
+
+//- UserFragment.js
+graphql`fragment UserFragment on User {
+  foo
+}`
 
 //- relay.config.json
 {

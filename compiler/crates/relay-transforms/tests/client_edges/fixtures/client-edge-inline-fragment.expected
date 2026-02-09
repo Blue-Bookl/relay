@@ -54,6 +54,7 @@ fragment Foo_node on Node {
         #     fragment_data_injection_mode: None,
         #     type_confirmed: false,
         #     resolver_type: ResolverModule,
+        #     return_fragment: None,
         # }
          @waterfall
         best_friend @waterfall {
@@ -85,6 +86,7 @@ fragment Foo_node on Node {
         #     fragment_data_injection_mode: None,
         #     type_confirmed: false,
         #     resolver_type: ResolverModule,
+        #     return_fragment: None,
         # }
          @waterfall
         best_friend @waterfall {

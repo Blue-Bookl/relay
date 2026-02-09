@@ -1,10 +1,15 @@
 ==================================== INPUT ====================================
 //- User_foo.js
-// Test that @returnFragment requires fragment names to start with the module name.
+// Test that @returnFragment rejects invalid GraphQL identifiers.
 /**
  * @RelayResolver User.foo: RelayResolverValue
- * @returnFragment WrongPrefix_fragment
+ * @returnFragment 123InvalidName
  */
+
+//- UserFragment.js
+graphql`fragment UserFragment on User {
+  foo
+}`
 
 //- relay.config.json
 {
@@ -20,10 +25,10 @@
 type Query { me: User }
 type User { name: String }
 ==================================== OUTPUT ===================================
-✖︎ The @returnFragment name must start with the module name ('UserFoo'). Got 'WrongPrefix_fragment' instead.
+✖︎ '123InvalidName' is not a valid fragment name. Fragment names must match /[_A-Za-z][_0-9A-Za-z]*/.
 
   User_foo.js:4:20
     3 │  * @RelayResolver User.foo: RelayResolverValue
-    4 │  * @returnFragment WrongPrefix_fragment
-      │                    ^^^^^^^^^^^^^^^^^^^^
+    4 │  * @returnFragment 123InvalidName
+      │                    ^^^^^^^^^^^^^^
     5 │

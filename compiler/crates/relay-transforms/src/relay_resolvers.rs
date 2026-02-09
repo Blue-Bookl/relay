@@ -23,6 +23,7 @@ use docblock_shared::LIVE_ARGUMENT_NAME;
 use docblock_shared::RELAY_RESOLVER_DIRECTIVE_NAME;
 use docblock_shared::RELAY_RESOLVER_WEAK_OBJECT_DIRECTIVE;
 use docblock_shared::RESOLVER_PROPERTY_LOOKUP_NAME;
+use docblock_shared::RETURN_FRAGMENT_ARGUMENT_NAME;
 use docblock_shared::TYPE_CONFIRMED_ARGUMENT_NAME;
 use graphql_ir::Argument;
 use graphql_ir::Directive;
@@ -116,7 +117,7 @@ pub enum ResolverSchemaGenType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct RelayResolverFieldMetadata {
+pub struct RelayResolverFieldMetadata {
     field_parent_type: StringKey,
     import_path: StringKey,
     import_name: Option<StringKey>,
@@ -127,6 +128,7 @@ struct RelayResolverFieldMetadata {
     output_type_info: ResolverOutputTypeInfo,
     type_confirmed: bool,
     resolver_type: ResolverSchemaGenType,
+    pub return_fragment: Option<WithLocation<FragmentDefinitionName>>,
 }
 associated_data_impl!(RelayResolverFieldMetadata);
 
@@ -148,6 +150,7 @@ pub struct RelayResolverMetadata {
     )>,
     pub type_confirmed: bool,
     pub resolver_type: ResolverSchemaGenType,
+    pub return_fragment: Option<WithLocation<FragmentDefinitionName>>,
 }
 associated_data_impl!(RelayResolverMetadata);
 
@@ -262,6 +265,7 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                     }),
                 type_confirmed: field_metadata.type_confirmed,
                 resolver_type: field_metadata.resolver_type,
+                return_fragment: field_metadata.return_fragment,
             };
 
             let mut new_directives: Vec<Directive> = vec![resolver_metadata.into()];
@@ -401,6 +405,7 @@ impl<'program> RelayResolverFieldTransform<'program> {
                     fragment_data_injection_mode,
                     type_confirmed,
                     resolver_type,
+                    return_fragment,
                 }) => {
                     let mut non_required_directives =
                         field.directives().iter().filter(|directive| {
@@ -501,6 +506,7 @@ impl<'program> RelayResolverFieldTransform<'program> {
                         fragment_data_injection_mode,
                         type_confirmed,
                         resolver_type,
+                        return_fragment
                     };
 
                     let mut directives: Vec<Directive> = field.directives().to_vec();
@@ -619,6 +625,7 @@ pub struct ResolverInfo {
     has_output_type: bool,
     pub type_confirmed: bool,
     pub resolver_type: ResolverSchemaGenType,
+    return_fragment: Option<WithLocation<FragmentDefinitionName>>,
 }
 
 pub fn get_resolver_info(
@@ -661,6 +668,17 @@ pub fn get_resolver_info(
                     None => ResolverSchemaGenType::ResolverModule,
                 };
 
+            let return_fragment = arguments
+                .named(*RETURN_FRAGMENT_ARGUMENT_NAME)
+                .and_then(|arg| {
+                    arg.value.get_string_literal().map(|name| WithLocation {
+                        // Use resolver_field's location (schema definition) rather than
+                        // error_location (usage site) to match the span from the directive.
+                        location: resolver_field.name.location.with_span(arg.value.span()),
+                        item: FragmentDefinitionName(name),
+                    })
+                });
+
             Ok(ResolverInfo {
                 fragment_name,
                 import_path,
@@ -689,6 +707,7 @@ pub fn get_resolver_info(
                 }),
                 type_confirmed,
                 resolver_type,
+                return_fragment,
             })
         })
 }

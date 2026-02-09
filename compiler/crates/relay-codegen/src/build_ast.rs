@@ -1546,6 +1546,7 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
                 .map(|mode| (WithLocation::new(type_name.location, fragment_name), mode)),
             type_confirmed: resolver_info.type_confirmed,
             resolver_type: resolver_info.resolver_type,
+            return_fragment: None,
         };
         let fragment_primitive = Primitive::Key(self.object(object! {
             args: Primitive::SkippableNull,

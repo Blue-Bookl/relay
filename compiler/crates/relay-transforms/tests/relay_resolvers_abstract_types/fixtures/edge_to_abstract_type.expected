@@ -41,6 +41,7 @@ query edgeToAbstractTypeQuery {
       #     fragment_data_injection_mode: None,
       #     type_confirmed: false,
       #     resolver_type: ResolverModule,
+      #     return_fragment: None,
       # }
       
     }

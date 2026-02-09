@@ -57,6 +57,7 @@ fragment FeedbackFragmentType on User {
   #                 has_output_type: false,
   #                 type_confirmed: false,
   #                 resolver_type: ResolverModule,
+  #                 return_fragment: None,
   #             },
   #         },
   #         ClientEdgeModelResolver {
@@ -85,6 +86,7 @@ fragment FeedbackFragmentType on User {
   #                 has_output_type: false,
   #                 type_confirmed: false,
   #                 resolver_type: ResolverModule,
+  #                 return_fragment: None,
   #             },
   #         },
   #     ],
@@ -103,6 +105,7 @@ fragment FeedbackFragmentType on User {
     #     fragment_data_injection_mode: None,
     #     type_confirmed: false,
     #     resolver_type: ResolverModule,
+    #     return_fragment: None,
     # }
     
     feedback_as_union {

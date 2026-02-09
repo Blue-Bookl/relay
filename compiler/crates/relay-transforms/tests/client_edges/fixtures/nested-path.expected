@@ -54,6 +54,7 @@ fragment Foo_user on ClientUser {
     #     fragment_data_injection_mode: None,
     #     type_confirmed: false,
     #     resolver_type: ResolverModule,
+    #     return_fragment: None,
     # }
     
     best_friend {
@@ -81,6 +82,7 @@ fragment Foo_user on ClientUser {
         #     fragment_data_injection_mode: None,
         #     type_confirmed: false,
         #     resolver_type: ResolverModule,
+        #     return_fragment: None,
         # }
         
         best_friend {

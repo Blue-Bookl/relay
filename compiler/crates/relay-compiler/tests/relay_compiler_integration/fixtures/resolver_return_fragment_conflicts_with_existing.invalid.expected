@@ -12,6 +12,13 @@ graphql`fragment UserResolverConflicting on User {
   name
 }`
 
+//- Query.js
+graphql`query Query {
+  me {
+    foo
+  }
+}`
+
 //- relay.config.json
 {
   "language": "flow",

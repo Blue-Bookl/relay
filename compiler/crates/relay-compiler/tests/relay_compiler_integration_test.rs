@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<6bb37b0783faddb3ea91a7a748b16b4d>>
+ * @generated SignedSource<<ea2c720600be1be789c909fa07291003>>
  */
 
 mod relay_compiler_integration;
@@ -321,31 +321,31 @@ async fn resolver_on_interface_returns_custom_scalar() {
 }
 
 #[tokio::test]
-async fn resolver_return_fragment_conflicts_with_existing() {
-    let input = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_conflicts_with_existing.input");
-    let expected = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_conflicts_with_existing.expected");
-    test_fixture(transform_fixture, file!(), "resolver_return_fragment_conflicts_with_existing.input", "relay_compiler_integration/fixtures/resolver_return_fragment_conflicts_with_existing.expected", input, expected).await;
+async fn resolver_return_fragment_conflicts_with_existing_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_conflicts_with_existing.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_conflicts_with_existing.invalid.expected");
+    test_fixture(transform_fixture, file!(), "resolver_return_fragment_conflicts_with_existing.invalid.input", "relay_compiler_integration/fixtures/resolver_return_fragment_conflicts_with_existing.invalid.expected", input, expected).await;
 }
 
 #[tokio::test]
-async fn resolver_return_fragment_invalid_module_name() {
-    let input = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_invalid_module_name.input");
-    let expected = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_invalid_module_name.expected");
-    test_fixture(transform_fixture, file!(), "resolver_return_fragment_invalid_module_name.input", "relay_compiler_integration/fixtures/resolver_return_fragment_invalid_module_name.expected", input, expected).await;
+async fn resolver_return_fragment_invalid_module_name_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_invalid_module_name.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_invalid_module_name.invalid.expected");
+    test_fixture(transform_fixture, file!(), "resolver_return_fragment_invalid_module_name.invalid.input", "relay_compiler_integration/fixtures/resolver_return_fragment_invalid_module_name.invalid.expected", input, expected).await;
 }
 
 #[tokio::test]
-async fn resolver_return_fragment_invalid_name() {
-    let input = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_invalid_name.input");
-    let expected = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_invalid_name.expected");
-    test_fixture(transform_fixture, file!(), "resolver_return_fragment_invalid_name.input", "relay_compiler_integration/fixtures/resolver_return_fragment_invalid_name.expected", input, expected).await;
+async fn resolver_return_fragment_invalid_name_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_invalid_name.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_invalid_name.invalid.expected");
+    test_fixture(transform_fixture, file!(), "resolver_return_fragment_invalid_name.invalid.input", "relay_compiler_integration/fixtures/resolver_return_fragment_invalid_name.invalid.expected", input, expected).await;
 }
 
 #[tokio::test]
-async fn resolver_return_fragment_requires_feature_flag() {
-    let input = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_requires_feature_flag.input");
-    let expected = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_requires_feature_flag.expected");
-    test_fixture(transform_fixture, file!(), "resolver_return_fragment_requires_feature_flag.input", "relay_compiler_integration/fixtures/resolver_return_fragment_requires_feature_flag.expected", input, expected).await;
+async fn resolver_return_fragment_requires_feature_flag_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_requires_feature_flag.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/resolver_return_fragment_requires_feature_flag.invalid.expected");
+    test_fixture(transform_fixture, file!(), "resolver_return_fragment_requires_feature_flag.invalid.input", "relay_compiler_integration/fixtures/resolver_return_fragment_requires_feature_flag.invalid.expected", input, expected).await;
 }
 
 #[tokio::test]

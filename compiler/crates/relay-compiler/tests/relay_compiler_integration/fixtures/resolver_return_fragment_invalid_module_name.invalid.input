@@ -1,14 +1,13 @@
-//- UserResolver.js
-// Test that @returnFragment rejects fragment names that conflict with existing fragments.
+//- User_foo.js
+// Test that @returnFragment requires fragment names to start with the module name.
 /**
  * @RelayResolver User.foo: RelayResolverValue
- * @returnFragment UserResolverConflicting
+ * @returnFragment WrongPrefix_fragment
  */
 
-//- UserResolverConflicting.js
-// This fragment exists in the project and should conflict.
-graphql`fragment UserResolverConflicting on User {
-  name
+//- UserFragment.js
+graphql`fragment UserFragment on User {
+  foo
 }`
 
 //- relay.config.json

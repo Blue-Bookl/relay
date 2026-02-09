@@ -50,6 +50,7 @@ fragment nestedFragmentSpreadOnAbstractTypeFragment on Cat {
     #     fragment_data_injection_mode: None,
     #     type_confirmed: false,
     #     resolver_type: ResolverModule,
+    #     return_fragment: None,
     # }
     
   }
@@ -79,6 +80,7 @@ query nestedFragmentSpreadOnAbstractTypeQuery {
       #     fragment_data_injection_mode: None,
       #     type_confirmed: false,
       #     resolver_type: ResolverModule,
+      #     return_fragment: None,
       # }
       
     }

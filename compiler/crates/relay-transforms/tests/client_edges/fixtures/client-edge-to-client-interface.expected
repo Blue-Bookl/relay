@@ -65,6 +65,7 @@ fragment Foo_user on User {
   #                 has_output_type: false,
   #                 type_confirmed: false,
   #                 resolver_type: ResolverModule,
+  #                 return_fragment: None,
   #             },
   #         },
   #     ],
@@ -83,6 +84,7 @@ fragment Foo_user on User {
     #     fragment_data_injection_mode: None,
     #     type_confirmed: false,
     #     resolver_type: ResolverModule,
+    #     return_fragment: None,
     # }
     
     best_friend {
