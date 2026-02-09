@@ -893,7 +893,7 @@ fn get_scalar_or_linked_field_hover_content(
         schema_documentation.get_field_hack_source(parent_type_name, field.name.item.lookup())
     {
         hover_contents.push(MarkedString::String(format!(
-            "View [**{}**]({}) in Codex",
+            "View [**{}**]({}) in CodeHub",
             field_hack_source,
             codex_url_for_symbol(field_hack_source),
         )));
@@ -961,7 +961,7 @@ fn on_hover_inline_fragment(
 
     if let Some(hack_source) = schema_documentation.get_hack_source(inline_fragment_condition) {
         let codex_link = MarkedString::String(format!(
-            "View [**{}**]({}) in Codex",
+            "View [**{}**]({}) in CodeHub",
             hack_source,
             codex_url_for_symbol(hack_source),
         ));
