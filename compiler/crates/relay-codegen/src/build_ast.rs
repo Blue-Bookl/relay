@@ -371,6 +371,32 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
         self.ast_builder.intern(Ast::Array(array))
     }
 
+    fn build_internal_metadata_directives(&mut self, directives: &[Directive]) -> Vec<ObjectEntry> {
+        directives
+            .iter()
+            .filter_map(|directive| {
+                if directive.name.item == *INTERNAL_METADATA_DIRECTIVE {
+                    if directive.arguments.len() != 1 {
+                        panic!("@__metadata directive should have only one argument!");
+                    }
+
+                    let arg = &directive.arguments[0];
+                    let key = arg.name.item;
+                    let value = match &arg.value.item {
+                        Value::Constant(value) => self.build_constant_value(value),
+                        _ => {
+                            panic!("@__metadata directive expect only constant argument values.");
+                        }
+                    };
+
+                    Some(ObjectEntry { key: key.0, value })
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     fn use_exec_time_resolvers(&self, context: &ContextualMetadata) -> bool {
         let feature_flags = &self.project_config.feature_flags;
         feature_flags.enable_resolver_normalization_ast
@@ -595,7 +621,8 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
             unmask = relay_directive.unmask;
         };
 
-        let mut metadata = vec![];
+        let mut metadata = self.build_internal_metadata_directives(&fragment.directives);
+
         if !skip_connection_metadata && let Some(connection_metadata) = &connection_metadata {
             metadata.push(self.build_connection_metadata(connection_metadata))
         }
@@ -709,6 +736,10 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
                 value: Primitive::Key(self.object(refetch_object)),
             })
         }
+
+        // sort metadata keys
+        metadata.sort_unstable_by_key(|entry| entry.key);
+
         if metadata.is_empty() {
             Primitive::SkippableNull
         } else {
@@ -2635,30 +2666,7 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
         operation: &OperationDefinition,
         request_parameters: RequestParameters<'_>,
     ) -> AstKey {
-        let mut metadata_items: Vec<ObjectEntry> = operation
-            .directives
-            .iter()
-            .filter_map(|directive| {
-                if directive.name.item == *INTERNAL_METADATA_DIRECTIVE {
-                    if directive.arguments.len() != 1 {
-                        panic!("@__metadata directive should have only one argument!");
-                    }
-
-                    let arg = &directive.arguments[0];
-                    let key = arg.name.item;
-                    let value = match &arg.value.item {
-                        Value::Constant(value) => self.build_constant_value(value),
-                        _ => {
-                            panic!("@__metadata directive expect only constant argument values.");
-                        }
-                    };
-
-                    Some(ObjectEntry { key: key.0, value })
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let mut metadata_items = self.build_internal_metadata_directives(&operation.directives);
 
         // add connection metadata
         let connection_metadata = extract_connection_metadata_from_directive(&operation.directives);
