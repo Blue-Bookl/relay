@@ -184,6 +184,20 @@ impl ProjectFixture {
     pub fn file_changes(&self) -> &FnvHashMap<PathBuf, String> {
         &self.file_changes
     }
+
+    /// Create a new ProjectFixture with file_changes merged into files.
+    /// File changes override files with the same path. The resulting fixture
+    /// has no file_changes (they're all merged into files).
+    pub fn with_file_changes_applied(&self) -> Self {
+        let mut merged_files = self.files.clone();
+        for (path, content) in &self.file_changes {
+            merged_files.insert(path.clone(), content.clone());
+        }
+        Self {
+            files: merged_files,
+            file_changes: Default::default(),
+        }
+    }
 }
 
 // Stringify a path such that it's stable across operating systems.

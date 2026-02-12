@@ -30,6 +30,38 @@ use relay_config::PersistConfig;
 
 pub async fn transform_fixture(fixture: &Fixture<'_>) -> Result<String, String> {
     let project_fixture = ProjectFixture::deserialize(fixture.content);
+
+    if project_fixture.file_changes().is_empty() {
+        return transform_project_fixture(&project_fixture).await;
+    }
+
+    let incremental_result = transform_project_fixture(&project_fixture).await;
+    let full_result = transform_project_fixture(&project_fixture.with_file_changes_applied()).await;
+
+    if incremental_result == full_result {
+        return incremental_result;
+    }
+
+    let incremental_string = match incremental_result {
+        Ok(incremental_result) => incremental_result,
+        Err(incremental_error) => incremental_error,
+    };
+    let full_string = match full_result {
+        Ok(full_result) => full_result,
+        Err(full_error) => full_error,
+    };
+
+    Err(format!(
+        "INCREMENTAL COMPILATION BUG DETECTED!\n\nIncremental and full results differ!\n\nIncremental:\n{}\n\nFull:\n{}\n",
+        incremental_string, full_string
+    ))
+}
+
+/// Given a file system state run the compiler and return the compiler output.
+///
+/// If there are file changes in the ProjectFixture, an initial build will be
+/// done followed by an incremental build with the file changes applied.
+pub async fn transform_project_fixture(project_fixture: &ProjectFixture) -> Result<String, String> {
     let has_file_changes = !project_fixture.file_changes().is_empty();
 
     let test_dir = TestDir::new();
@@ -84,17 +116,26 @@ pub async fn transform_fixture(fixture: &Fixture<'_>) -> Result<String, String> 
 
                     match incremental_result {
                         Ok(()) => {
-                            format_successful_output(test_dir.path(), &project_fixture, &state)
+                            format_successful_output(test_dir.path(), project_fixture, &state)
                         }
                         Err(compiler_error) => {
                             format_compiler_error(test_dir.path(), compiler_error)
                         }
                     }
                 } else {
-                    format_successful_output(test_dir.path(), &project_fixture, &state)
+                    format_successful_output(test_dir.path(), project_fixture, &state)
                 }
             }
-            Err(compiler_error) => format_compiler_error(test_dir.path(), compiler_error),
+            Err(compiler_error) => {
+                let error_string = format_compiler_error(test_dir.path(), compiler_error);
+                if has_file_changes {
+                    panic!(
+                        "Invalid incremental test fixutre. Test fixtures with file changes must compile successfully in the initial build. Errored with:\n\n{}",
+                        error_string
+                    );
+                }
+                error_string
+            }
         }
     };
 
