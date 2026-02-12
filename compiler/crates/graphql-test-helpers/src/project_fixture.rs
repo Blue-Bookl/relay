@@ -13,6 +13,12 @@ use std::path::PathBuf;
 use fnv::FnvHashMap;
 use walkdir::WalkDir;
 
+/// Represents a file change: either an update with new content, or a deletion.
+pub enum FileChange {
+    Change(String),
+    Delete,
+}
+
 /// A file format that supports encoding multiple files in a directory as a
 /// single file. Useful for encoding a multi-file setup as input into a
 /// compiler test.
@@ -35,18 +41,25 @@ use walkdir::WalkDir;
 /// //-++ foo.js
 /// updated content of foo.js
 /// ```
+///
+/// File deletions are defined with `//-xx filename`:
+/// ```text
+/// //-xx bar.js
+/// ```
+/// Deletions have no content body — just the path.
 pub struct ProjectFixture {
     // Relative path to file contents
     files: FnvHashMap<PathBuf, String>,
-    // Relative path to file change contents
-    file_changes: FnvHashMap<PathBuf, String>,
+    // Relative path to file change (update or deletion)
+    file_changes: FnvHashMap<PathBuf, FileChange>,
 }
 
 impl ProjectFixture {
     /// Parse a fixture file. Useful for parsing an existing fixture test.
     pub fn deserialize(input: &str) -> Self {
         let mut files: FnvHashMap<PathBuf, String> = Default::default();
-        let mut file_changes: FnvHashMap<PathBuf, String> = Default::default();
+        let mut file_changes: FnvHashMap<PathBuf, FileChange> = Default::default();
+        let mut file_deletions: Vec<PathBuf> = Vec::new();
         let mut file_name: Option<PathBuf> = None;
         let mut is_file_change = false;
         let mut content: Vec<String> = Vec::new();
@@ -56,7 +69,7 @@ impl ProjectFixture {
                 if let Some(prev_file_name) = file_name.take() {
                     let joined = content.join("\n");
                     if is_file_change {
-                        file_changes.insert(prev_file_name, joined);
+                        file_changes.insert(prev_file_name, FileChange::Change(joined));
                     } else {
                         files.insert(prev_file_name, joined);
                     }
@@ -65,7 +78,10 @@ impl ProjectFixture {
             };
 
         for line in input.lines() {
-            if line.starts_with("//-++ ") {
+            if line.starts_with("//-xx ") {
+                flush_pending(&mut file_name, is_file_change, &mut content);
+                file_deletions.push(PathBuf::from(line.trim_start_matches("//-xx ").trim()));
+            } else if line.starts_with("//-++ ") {
                 flush_pending(&mut file_name, is_file_change, &mut content);
                 file_name = Some(PathBuf::from(line.trim_start_matches("//-++ ").trim()));
                 is_file_change = true;
@@ -78,6 +94,11 @@ impl ProjectFixture {
             }
         }
         flush_pending(&mut file_name, is_file_change, &mut content);
+
+        // Merge deletions into file_changes now that flush_pending's borrow is released
+        for path in file_deletions {
+            file_changes.insert(path, FileChange::Delete);
+        }
 
         Self {
             files,
@@ -92,8 +113,8 @@ impl ProjectFixture {
         let mut sorted: Vec<_> = self.files.clone().into_iter().collect();
         sorted.sort_by(|x, y| x.0.cmp(&y.0));
 
-        let mut sorted_changes: Vec<_> = self.file_changes.clone().into_iter().collect();
-        sorted_changes.sort_by(|x, y| x.0.cmp(&y.0));
+        let mut sorted_changes: Vec<_> = self.file_changes.iter().collect();
+        sorted_changes.sort_by(|x, y| x.0.cmp(y.0));
 
         let mut output: String = Default::default();
 
@@ -103,10 +124,17 @@ impl ProjectFixture {
             output.push('\n');
         }
 
-        for (file_name, content) in sorted_changes {
-            output.push_str(&format!("//-++ {}\n", format_normalized_path(&file_name)));
-            output.push_str(&content);
-            output.push('\n');
+        for (file_name, change) in sorted_changes {
+            match change {
+                FileChange::Change(content) => {
+                    output.push_str(&format!("//-++ {}\n", format_normalized_path(file_name)));
+                    output.push_str(content);
+                    output.push('\n');
+                }
+                FileChange::Delete => {
+                    output.push_str(&format!("//-xx {}\n", format_normalized_path(file_name)));
+                }
+            }
         }
 
         output
@@ -128,11 +156,19 @@ impl ProjectFixture {
 
     /// Write file changes to an existing directory.
     /// Assumes the directory already exists. Useful for applying file changes
-    /// during incremental compilation tests.
+    /// during incremental compilation tests. Writes updated content for
+    /// Change entries and removes files for Delete entries.
     pub fn flush_file_changes_to_dir(&self, dir: &Path) {
-        for (file_name, content) in &self.file_changes {
+        for (file_name, change) in &self.file_changes {
             let file_path = dir.join(file_name);
-            fs::write(file_path, content).expect("Expected to write file change");
+            match change {
+                FileChange::Change(content) => {
+                    fs::write(file_path, content).expect("Expected to write file change");
+                }
+                FileChange::Delete => {
+                    fs::remove_file(file_path).expect("Expected to delete file");
+                }
+            }
         }
     }
 
@@ -181,7 +217,7 @@ impl ProjectFixture {
     }
 
     /// Return file changes map
-    pub fn file_changes(&self) -> &FnvHashMap<PathBuf, String> {
+    pub fn file_changes(&self) -> &FnvHashMap<PathBuf, FileChange> {
         &self.file_changes
     }
 
@@ -190,13 +226,25 @@ impl ProjectFixture {
     /// has no file_changes (they're all merged into files).
     pub fn with_file_changes_applied(&self) -> Self {
         let mut merged_files = self.files.clone();
-        for (path, content) in &self.file_changes {
-            merged_files.insert(path.clone(), content.clone());
+        for (path, change) in &self.file_changes {
+            match change {
+                FileChange::Change(content) => {
+                    merged_files.insert(path.clone(), content.clone());
+                }
+                FileChange::Delete => {
+                    merged_files.remove(path);
+                }
+            }
         }
         Self {
             files: merged_files,
             file_changes: Default::default(),
         }
+    }
+
+    /// Add a file change entry.
+    pub fn add_file_change(&mut self, path: PathBuf, change: FileChange) {
+        self.file_changes.insert(path, change);
     }
 }
 

@@ -26,6 +26,7 @@ use graphql_syntax::parse_executable;
 use graphql_text_printer::PrinterOptions;
 use graphql_text_printer::print_fragment;
 use graphql_text_printer::print_operation;
+pub use project_fixture::FileChange;
 pub use project_fixture::ProjectFixture;
 use relay_test_schema::get_test_schema;
 use relay_test_schema::get_test_schema_with_located_extensions;

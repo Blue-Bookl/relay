@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<ea2c720600be1be789c909fa07291003>>
+ * @generated SignedSource<<799e96f21202e834261a84c7bdb28368>>
  */
 
 mod relay_compiler_integration;
@@ -188,6 +188,13 @@ async fn fragment_arguments() {
 }
 
 #[tokio::test]
+async fn incremental_file_deletion() {
+    let input = include_str!("relay_compiler_integration/fixtures/incremental_file_deletion.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/incremental_file_deletion.expected");
+    test_fixture(transform_fixture, file!(), "incremental_file_deletion.input", "relay_compiler_integration/fixtures/incremental_file_deletion.expected", input, expected).await;
+}
+
+#[tokio::test]
 async fn live_resolver_implements_interface_field() {
     let input = include_str!("relay_compiler_integration/fixtures/live_resolver_implements_interface_field.input");
     let expected = include_str!("relay_compiler_integration/fixtures/live_resolver_implements_interface_field.expected");
@@ -206,6 +213,20 @@ async fn multiple_resolvers_returns_interfaces_of_all_strong_model_type() {
     let input = include_str!("relay_compiler_integration/fixtures/multiple_resolvers_returns_interfaces_of_all_strong_model_type.input");
     let expected = include_str!("relay_compiler_integration/fixtures/multiple_resolvers_returns_interfaces_of_all_strong_model_type.expected");
     test_fixture(transform_fixture, file!(), "multiple_resolvers_returns_interfaces_of_all_strong_model_type.input", "relay_compiler_integration/fixtures/multiple_resolvers_returns_interfaces_of_all_strong_model_type.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn non_relay_file_in_generated_dir() {
+    let input = include_str!("relay_compiler_integration/fixtures/non_relay_file_in_generated_dir.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/non_relay_file_in_generated_dir.expected");
+    test_fixture(transform_fixture, file!(), "non_relay_file_in_generated_dir.input", "relay_compiler_integration/fixtures/non_relay_file_in_generated_dir.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn non_relay_file_in_generated_dir_with_custom_output() {
+    let input = include_str!("relay_compiler_integration/fixtures/non_relay_file_in_generated_dir_with_custom_output.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/non_relay_file_in_generated_dir_with_custom_output.expected");
+    test_fixture(transform_fixture, file!(), "non_relay_file_in_generated_dir_with_custom_output.input", "relay_compiler_integration/fixtures/non_relay_file_in_generated_dir_with_custom_output.expected", input, expected).await;
 }
 
 #[tokio::test]

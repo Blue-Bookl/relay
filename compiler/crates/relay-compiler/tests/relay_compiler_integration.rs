@@ -12,6 +12,7 @@ use std::sync::Arc;
 use common::ConsoleLogger;
 use fixture_tests::Fixture;
 use futures_util::FutureExt;
+use graphql_test_helpers::FileChange;
 use graphql_test_helpers::ProjectFixture;
 use graphql_test_helpers::TestDir;
 use relay_compiler::File;
@@ -96,10 +97,13 @@ pub async fn transform_project_fixture(project_fixture: &ProjectFixture) -> Resu
                     // Build the list of changed files for the compiler
                     let changed_files: Vec<File> = project_fixture
                         .file_changes()
-                        .keys()
-                        .map(|path| File {
+                        .iter()
+                        .map(|(path, change)| File {
                             name: path.clone(),
-                            exists: true,
+                            exists: match change {
+                                FileChange::Change(_) => true,
+                                FileChange::Delete => false,
+                            },
                         })
                         .collect();
 
@@ -184,9 +188,35 @@ fn format_successful_output(
 ) -> String {
     let mut output = ProjectFixture::read_from_dir(test_dir);
 
+    // Detect input files that were deleted by the compiler.
+    // Only consider files inside the test dir, since read_from_dir only
+    // walks the test dir and can't observe files written outside of it.
+    // Exclude files that were explicitly deleted as input file changes —
+    // those were removed by the test harness, not by the compiler.
+    let deleted_files: Vec<_> = project_fixture
+        .files()
+        .keys()
+        .filter(|path| {
+            // Paths starting with ".." are outside the test dir and invisible
+            // to read_from_dir, so their absence doesn't mean compiler deletion.
+            !path.starts_with("..")
+                && !output.files().contains_key(*path)
+                && !matches!(
+                    project_fixture.file_changes().get(*path),
+                    Some(FileChange::Delete)
+                )
+        })
+        .cloned()
+        .collect();
+
     // Omit the input files from the output
     output.remove_files_by_keys(project_fixture.files().keys());
     output.remove_files_by_keys(project_fixture.file_changes().keys());
+
+    // Record deleted files using the //-xx syntax
+    for path in deleted_files {
+        output.add_file_change(path, FileChange::Delete);
+    }
 
     let mut expected = output
         .serialize()
