@@ -170,6 +170,25 @@ struct LspCommand {
 #[clap(about = "Print the Json Schema definition for the Relay compiler config.")]
 struct ConfigJsonSchemaCommand {}
 
+#[derive(Parser)]
+#[clap(
+    rename_all = "camel_case",
+    about = "EXPERIMENTAL! Compare intermediate representations (IR) of documents passed via left and right, outputs selections that exists in left but not in right."
+)]
+struct CompareDocumentIRCommand {
+    /// Document in string, must contain exactly 1 operation.
+    #[clap(long)]
+    left: String,
+
+    /// Document in string, must contain exactly 1 operation.
+    #[clap(long)]
+    right: String,
+
+    /// Path(s) to the full schema file(s) to convert documents to intermediate representation (IR) for comparison.
+    #[clap(long, num_args = 1..)]
+    schema_paths: Vec<String>,
+}
+
 #[derive(clap::Subcommand)]
 enum Commands {
     Compiler(CompileCommand),
@@ -177,6 +196,7 @@ enum Commands {
     ConfigJsonSchema(ConfigJsonSchemaCommand),
     Codemod(CodemodCommand),
     ExperimentalRegenerateSubSchema(UpdateSchemaCommand),
+    ExperimentalCompareDocumentIR(CompareDocumentIRCommand),
 }
 
 #[derive(ValueEnum, Clone, Copy)]
@@ -240,6 +260,9 @@ async fn main() {
         Commands::Codemod(command) => handle_codemod_command(command).await,
         Commands::ExperimentalRegenerateSubSchema(command) => {
             handle_regenerate_subschema_command(command).await
+        }
+        Commands::ExperimentalCompareDocumentIR(command) => {
+            handle_compare_document_ir_command(command)
         }
     };
 
@@ -344,6 +367,20 @@ async fn handle_regenerate_subschema_command(command: UpdateSchemaCommand) -> Re
             ),
         })
     })
+}
+
+fn handle_compare_document_ir_command(command: CompareDocumentIRCommand) -> Result<(), Error> {
+    configure_logger(OutputKind::Verbose, TerminalMode::Mixed);
+
+    let (_, message) =
+        graphql_ir_diff::compare(command.schema_paths, &command.left, &command.right).map_err(
+            |e| Error::CompilerError {
+                details: format!("{}", e),
+            },
+        )?;
+
+    info!("{}", message);
+    Ok(())
 }
 
 async fn handle_compiler_command(command: CompileCommand) -> Result<(), Error> {

@@ -11,6 +11,7 @@ license = "MIT"
 [dependencies]
 clap = { version = "4.5.42", features = ["derive", "env", "string", "unicode", "wrap_help"] }
 common = { path = "../common" }
+graphql-ir-diff = { path = "../graphql-ir-diff" }
 intern = { path = "../intern" }
 log = { version = "0.4.27", features = ["kv_unstable", "kv_unstable_std"] }
 relay-codemod = { path = "../relay-codemod" }
