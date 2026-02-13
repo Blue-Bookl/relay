@@ -4,13 +4,20 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<2041e5f30a9d9b11cee1caf612cbffb1>>
+ * @generated SignedSource<<6ebe426cb1c1ab9d8105c252e78e883c>>
  */
 
 mod subschema_extraction;
 
 use subschema_extraction::transform_fixture;
 use fixture_tests::test_fixture;
+
+#[tokio::test]
+async fn inlined_nested_input() {
+    let input = include_str!("subschema_extraction/fixtures/inlined_nested_input.input");
+    let expected = include_str!("subschema_extraction/fixtures/inlined_nested_input.expected");
+    test_fixture(transform_fixture, file!(), "inlined_nested_input.input", "subschema_extraction/fixtures/inlined_nested_input.expected", input, expected).await;
+}
 
 #[tokio::test]
 async fn missing_full_schema() {
