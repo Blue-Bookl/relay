@@ -42,6 +42,8 @@ directive @stream(
 
 directive @fetchable(field_name: String!) on OBJECT
 
+directive @vulture(name: String!) on QUERY | FRAGMENT_DEFINITION
+
 type Query {
   checkinSearchQuery(query: CheckinSearchInput): CheckinSearchResult
   defaultSettings: Settings
