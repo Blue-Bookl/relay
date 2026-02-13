@@ -5,6 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use std::cmp::Ordering;
+use std::cmp::Ordering::Greater;
+use std::cmp::Ordering::Less;
 use std::fmt::Display;
 
 use intern::string_key::Intern;
@@ -14,6 +17,13 @@ use logos::Logos;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum SchemaCoordinate {
+    Directive {
+        name: StringKey,
+    },
+    DirectiveArgument {
+        directive_name: StringKey,
+        argument_name: StringKey,
+    },
     Type {
         name: StringKey,
     },
@@ -24,13 +34,6 @@ pub enum SchemaCoordinate {
     Argument {
         parent_name: StringKey,
         member_name: StringKey,
-        argument_name: StringKey,
-    },
-    Directive {
-        name: StringKey,
-    },
-    DirectiveArgument {
-        directive_name: StringKey,
         argument_name: StringKey,
     },
 }
@@ -271,8 +274,92 @@ impl Display for SchemaCoordinate {
 }
 
 impl Ord for SchemaCoordinate {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.to_string().cmp(&other.to_string())
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            // Within directives: compare by directive name, then by argument presence/name
+            (Self::Directive { name: a }, Self::Directive { name: b }) => a.cmp(b),
+            (
+                Self::Directive { name: a },
+                Self::DirectiveArgument {
+                    directive_name: b, ..
+                },
+            ) => a.cmp(b).then(Less),
+            (
+                Self::DirectiveArgument {
+                    directive_name: a, ..
+                },
+                Self::Directive { name: b },
+            ) => a.cmp(b).then(Greater),
+            (
+                Self::DirectiveArgument {
+                    directive_name: a_dir,
+                    argument_name: a_arg,
+                },
+                Self::DirectiveArgument {
+                    directive_name: b_dir,
+                    argument_name: b_arg,
+                },
+            ) => a_dir.cmp(b_dir).then_with(|| a_arg.cmp(b_arg)),
+
+            // Directives (@-prefixed) sort before non-directives
+            (Self::Directive { .. } | Self::DirectiveArgument { .. }, _) => Less,
+            (_, Self::Directive { .. } | Self::DirectiveArgument { .. }) => Greater,
+
+            // Within non-directives: compare by parent/type name, then member, then argument
+            (Self::Type { name: a }, Self::Type { name: b }) => a.cmp(b),
+            (
+                Self::Type { name: a },
+                Self::Member { parent_name: b, .. } | Self::Argument { parent_name: b, .. },
+            ) => a.cmp(b).then(Less),
+            (
+                Self::Member { parent_name: a, .. } | Self::Argument { parent_name: a, .. },
+                Self::Type { name: b },
+            ) => a.cmp(b).then(Greater),
+            (
+                Self::Member {
+                    parent_name: a1,
+                    member_name: a2,
+                },
+                Self::Member {
+                    parent_name: b1,
+                    member_name: b2,
+                },
+            ) => a1.cmp(b1).then_with(|| a2.cmp(b2)),
+            (
+                Self::Member {
+                    parent_name: a1,
+                    member_name: a2,
+                },
+                Self::Argument {
+                    parent_name: b1,
+                    member_name: b2,
+                    ..
+                },
+            ) => a1.cmp(b1).then_with(|| a2.cmp(b2)).then(Less),
+            (
+                Self::Argument {
+                    parent_name: a1,
+                    member_name: a2,
+                    ..
+                },
+                Self::Member {
+                    parent_name: b1,
+                    member_name: b2,
+                },
+            ) => a1.cmp(b1).then_with(|| a2.cmp(b2)).then(Greater),
+            (
+                Self::Argument {
+                    parent_name: a1,
+                    member_name: a2,
+                    argument_name: a3,
+                },
+                Self::Argument {
+                    parent_name: b1,
+                    member_name: b2,
+                    argument_name: b3,
+                },
+            ) => a1.cmp(b1).then_with(|| a2.cmp(b2)).then_with(|| a3.cmp(b3)),
+        }
     }
 }
 
@@ -716,5 +803,69 @@ mod tests {
                 .unwrap_or_else(|e| panic!("Failed to reparse '{}': {}", displayed, e));
             assert_eq!(coord, reparsed, "Roundtrip failed for '{}'", displayed);
         }
+    }
+
+    // ── Ord ───────────────────────────────────────────────────────────
+
+    fn assert_sorted_order(coords: &[&str]) {
+        let mut parsed: Vec<_> = coords
+            .iter()
+            .rev()
+            .map(|s| parse_schema_coordinate(s).unwrap())
+            .collect();
+        parsed.sort();
+        let result: Vec<String> = parsed.iter().map(|c| c.to_string()).collect();
+        let expected: Vec<&str> = coords.to_vec();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn ord_directives_before_types() {
+        assert_sorted_order(&["@zzz", "AAA"]);
+    }
+
+    #[test]
+    fn ord_type_before_member_same_name() {
+        assert_sorted_order(&["Foo", "Foo.bar"]);
+    }
+
+    #[test]
+    fn ord_member_before_argument_same_prefix() {
+        assert_sorted_order(&["Foo.bar", "Foo.bar(id:)"]);
+    }
+
+    #[test]
+    fn ord_directive_before_directive_argument_same_name() {
+        assert_sorted_order(&["@skip", "@skip(if:)"]);
+    }
+
+    #[test]
+    fn ord_dot_sorts_before_name_chars() {
+        assert_sorted_order(&["Foo.bar", "Foobar"]);
+    }
+
+    #[test]
+    fn ord_mixed_variants() {
+        assert_sorted_order(&[
+            "@include",
+            "@include(if:)",
+            "@skip",
+            "@skip(if:)",
+            "Apple",
+            "Apple.a_field",
+            "Apple.a_field(id:)",
+            "Apple.z_field",
+            "Query",
+            "Query.user",
+            "Query.user(id:)",
+            "Zebra",
+        ]);
+    }
+
+    #[test]
+    fn ord_equal_coordinates() {
+        let a = parse_schema_coordinate("Query.user").unwrap();
+        let b = parse_schema_coordinate("Query.user").unwrap();
+        assert_eq!(a.cmp(&b), std::cmp::Ordering::Equal);
     }
 }
