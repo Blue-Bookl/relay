@@ -688,7 +688,9 @@ fn exclude_directives(
         if !subset_directives.contains(&this_directive.name.0)
             && other
                 .named(this_directive.name)
-                .is_none_or(|other_directive| this_directive != other_directive)
+                .is_none_or(|other_directive| {
+                    !directive_value_semantically_eq(this_directive, other_directive)
+                })
         {
             not_excluded.push(this_directive.clone());
         }
@@ -699,13 +701,60 @@ fn exclude_directives(
         if subset_directives.contains(&other_diretive.name.0)
             && this
                 .named(other_diretive.name)
-                .is_none_or(|this_directive| other_diretive != this_directive)
+                .is_none_or(|this_directive| {
+                    !directive_value_semantically_eq(other_diretive, this_directive)
+                })
         {
             not_excluded.push(build_missing_required_directive(other_diretive))
         }
     }
 
     not_excluded
+}
+
+/// Semantic equality for DirectiveValue, ignoring Token/Span source positions
+/// in directive argument values.
+///
+/// The derived PartialEq on DirectiveValue compares argument ConstantValues structurally,
+/// which includes Token (containing Span { start, end }). Two semantically identical directives
+/// parsed at different byte offsets compare as unequal. This function compares only the semantic
+/// content: directive name, argument names, and argument values (ignoring source positions).
+fn directive_value_semantically_eq(a: &DirectiveValue, b: &DirectiveValue) -> bool {
+    a.name == b.name
+        && a.arguments.len() == b.arguments.len()
+        && a.arguments
+            .iter()
+            .zip(b.arguments.iter())
+            .all(|(a, b)| a.name == b.name && constant_value_semantically_eq(&a.value, &b.value))
+}
+
+/// Semantic equality for ConstantValue, ignoring Token/Span source positions.
+fn constant_value_semantically_eq(a: &ConstantValue, b: &ConstantValue) -> bool {
+    match (a, b) {
+        (ConstantValue::Int(a), ConstantValue::Int(b)) => a.value == b.value,
+        (ConstantValue::Float(a), ConstantValue::Float(b)) => {
+            a.value == b.value && a.source_value == b.source_value
+        }
+        (ConstantValue::String(a), ConstantValue::String(b)) => a.value == b.value,
+        (ConstantValue::Boolean(a), ConstantValue::Boolean(b)) => a.value == b.value,
+        (ConstantValue::Null(_), ConstantValue::Null(_)) => true,
+        (ConstantValue::Enum(a), ConstantValue::Enum(b)) => a.value == b.value,
+        (ConstantValue::List(a), ConstantValue::List(b)) => {
+            a.items.len() == b.items.len()
+                && a.items
+                    .iter()
+                    .zip(b.items.iter())
+                    .all(|(a, b)| constant_value_semantically_eq(a, b))
+        }
+        (ConstantValue::Object(a), ConstantValue::Object(b)) => {
+            a.items.len() == b.items.len()
+                && a.items.iter().zip(b.items.iter()).all(|(a, b)| {
+                    a.name.value == b.name.value
+                        && constant_value_semantically_eq(&a.value, &b.value)
+                })
+        }
+        _ => false,
+    }
 }
 
 fn build_missing_required_directive(directive_from_other: &DirectiveValue) -> DirectiveValue {
@@ -1232,6 +1281,103 @@ pub mod tests {
                 subset_directives: ["deprecated".intern()].iter().cloned().collect(),
                 ..SafeExclusionOptions::default()
             }
+        );
+    }
+
+    /// Regression test: directive value comparison should be semantic, ignoring source
+    /// byte positions (Span). When two schemas contain semantically identical types with
+    /// directive arguments, but the types are at different byte offsets (e.g., because one
+    /// schema has extra types prepended), exclude should still recognize them as equal.
+    #[test]
+    fn directive_value_comparison_ignores_span() {
+        // Both schemas contain the same type B with a directive that has arguments.
+        // Schema "base" has an extra type A prepended, which shifts byte offsets
+        // for everything after it. Schema "excluded" has the same type B starting
+        // at a different byte position.
+        //
+        // The exclude should be empty for type B because it's semantically identical,
+        // and should only show type A (which is only in base).
+        let base = r#"
+            type A {
+                id: ID
+            }
+            type B @strong(field: "id") {
+                id: ID
+                name: String
+            }
+        "#;
+        let excluded = r#"
+            type B @strong(field: "id") {
+                id: ID
+                name: String
+            }
+        "#;
+
+        // Type B is semantically identical in both schemas, only A is unique to base
+        assert_base_exclude_expected!(
+            base,
+            excluded,
+            r#"
+            type A {
+                id: ID
+            }
+            "#,
+        );
+    }
+
+    /// Same test but with multiple directive arguments and different value types.
+    #[test]
+    fn directive_value_comparison_ignores_span_multiple_args() {
+        let base = r#"
+            type Padding { id: ID }
+            type MyType @fb_owner(oncall: "my_oncall") @retention(purgeAfterMs: 86400000) {
+                field: String
+            }
+        "#;
+        let excluded = r#"
+            type MyType @fb_owner(oncall: "my_oncall") @retention(purgeAfterMs: 86400000) {
+                field: String
+            }
+        "#;
+
+        assert_base_exclude_expected!(
+            base,
+            excluded,
+            r#"
+            type Padding {
+                id: ID
+            }
+            "#,
+        );
+    }
+
+    /// Test that directive comparison still detects actual semantic differences,
+    /// even when at different byte positions.
+    #[test]
+    fn directive_value_comparison_detects_real_differences() {
+        let base = r#"
+            type Padding { id: ID }
+            type MyType @strong(field: "id") {
+                field: String
+            }
+        "#;
+        let excluded = r#"
+            type MyType @strong(field: "name") {
+                field: String
+            }
+        "#;
+
+        // The directive argument value is different ("id" vs "name"),
+        // so MyType should appear in the diff
+        assert_base_exclude_expected!(
+            base,
+            excluded,
+            r#"
+            type Padding {
+                id: ID
+            }
+            type MyType @strong(field: "id")
+            "#,
         );
     }
 }
