@@ -199,6 +199,9 @@ impl<'a> UsedSchemaIRCollector<'a> {
                 if let &Type::InputObject(id) = argument_type {
                     self.used_schema
                         .touch_input_object(self.schema, &id, &self.options);
+                    // Expand all fields recursively if include_implicit_input_fields_and_enum_values is set
+                    self.used_schema
+                        .touch_variable_type(self.schema, argument_type, &self.options);
                     let input_object_def = self.schema.input_object(id);
                     for input_field in arg_val.iter() {
                         let input_field_type = input_object_def
@@ -252,6 +255,9 @@ impl<'a> UsedSchemaIRCollector<'a> {
                 if let &Type::InputObject(id) = argument_type {
                     self.used_schema
                         .touch_input_object(self.schema, &id, &self.options);
+                    // Expand all fields recursively if include_implicit_input_fields_and_enum_values is set
+                    self.used_schema
+                        .touch_variable_type(self.schema, argument_type, &self.options);
                     let input_object_def = self.schema.input_object(id);
                     for input_field in object_val.iter() {
                         let input_field_type = input_object_def
