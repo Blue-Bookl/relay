@@ -26,4 +26,4 @@ schema = { path = "../schema" }
 
 [dev-dependencies]
 indoc = "2.0.2"
-pretty_assertions = { version = "1.2", features = ["alloc"], default-features = false }
+pretty_assertions = { version = "1.4.1", features = ["alloc"], default-features = false }
