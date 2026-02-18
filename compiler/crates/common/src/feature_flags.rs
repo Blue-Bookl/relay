@@ -199,6 +199,11 @@ pub struct FeatureFlags {
     /// migration or for client-side overrides.
     #[serde(default)]
     pub enable_shadow_resolvers: FeatureFlag,
+
+    /// Use `(expr as Type)` instead of `(expr: Type)` for Flow type assertions.
+    /// This enables gradual rollout of the new casting syntax across files.
+    #[serde(default)]
+    pub new_flow_casting_syntax: FeatureFlag,
 }
 
 impl Default for FeatureFlags {
@@ -233,6 +238,7 @@ impl Default for FeatureFlags {
             disallow_required_action_throw_on_semantically_nullable_fields: Default::default(),
             enable_legacy_verbose_resolver_syntax: Default::default(),
             enable_shadow_resolvers: Default::default(),
+            new_flow_casting_syntax: Default::default(),
 
             // enabled-by-default
             enforce_fragment_alias_where_ambiguous: FeatureFlag::Enabled,

@@ -689,6 +689,13 @@
             "kind": "disabled"
           }
         },
+        "new_flow_casting_syntax": {
+          "description": "Use `(expr as Type)` instead of `(expr: Type)` for Flow type assertions.\nThis enables gradual rollout of the new casting syntax across files.",
+          "$ref": "#/$defs/FeatureFlag",
+          "default": {
+            "kind": "disabled"
+          }
+        },
         "no_inline": {
           "description": "For now, this also disallows fragments with variable definitions\nThis also makes @module to opt in using @no_inline internally\nNOTE that the presence of a fragment in this list only controls whether a fragment is *allowed* to\nuse @no_inline: whether the fragment is inlined or not depends on whether it actually uses that\ndirective.",
           "$ref": "#/$defs/FeatureFlag",
@@ -941,6 +948,9 @@
               "kind": "enabled"
             },
             "legacy_include_path_in_required_reader_nodes": {
+              "kind": "disabled"
+            },
+            "new_flow_casting_syntax": {
               "kind": "disabled"
             },
             "no_inline": {

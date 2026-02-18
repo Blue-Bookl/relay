@@ -880,13 +880,13 @@ fn write_input_object_types(
 ///
 /// - For fragments whose type condition is abstract:
 ///   ({ __id: string, __isFragmentName: ?string, $fragmentSpreads: FragmentRefType }) =>
-///     ({ __id: string, __isFragmentName: string, $fragmentSpreads: FragmentRefType })
-///     | false
+///   ({ __id: string, __isFragmentName: string, $fragmentSpreads: FragmentRefType })
+///   | false
 ///
 /// - For fragments whose type condition is concrete:
 ///   ({ __id: string, __typename: string, $fragmentSpreads: FragmentRefType }) =>
-///     ({ __id: string, __typename: FragmentType, $fragmentSpreads: FragmentRefType })
-///     | false
+///   ({ __id: string, __typename: FragmentType, $fragmentSpreads: FragmentRefType })
+///   | false
 ///
 /// Validators' runtime behavior checks for the presence of the __isFragmentName marker
 /// (for abstract fragment types) or a matching concrete type (for concrete fragment
@@ -898,14 +898,25 @@ pub(crate) fn write_validator_function(
     fragment_definition: &FragmentDefinition,
     writer: &mut Box<dyn Writer>,
 ) -> FmtResult {
+    let use_new_flow_casting_syntax = typegen_context
+        .project_config
+        .feature_flags
+        .new_flow_casting_syntax
+        .is_enabled_for(fragment_definition.name.item.0);
     if fragment_definition.type_condition.is_abstract_type() {
         write_abstract_validator_function(
             typegen_context.project_config.typegen_config.language,
+            use_new_flow_casting_syntax,
             fragment_definition,
             writer,
         )
     } else {
-        write_concrete_validator_function(typegen_context, fragment_definition, writer)
+        write_concrete_validator_function(
+            typegen_context,
+            use_new_flow_casting_syntax,
+            fragment_definition,
+            writer,
+        )
     }
 }
 
@@ -925,6 +936,7 @@ pub(crate) fn write_validator_function(
 /// };
 fn write_abstract_validator_function(
     language: TypegenLanguage,
+    use_new_flow_casting_syntax: bool,
     fragment_definition: &FragmentDefinition,
     writer: &mut Box<dyn Writer>,
 ) -> FmtResult {
@@ -992,7 +1004,12 @@ fn write_abstract_validator_function(
 
     match language {
         TypegenLanguage::Flow | TypegenLanguage::JavaScript => {
-            write!(writer, "(value{}: ", &open_comment)?;
+            let cast_op = if use_new_flow_casting_syntax {
+                " as "
+            } else {
+                ": "
+            };
+            write!(writer, "(value{}{cast_op}", &open_comment)?;
             writer.write(&AST::Any)?;
             write!(writer, "{}) ", &close_comment)?;
         }
@@ -1022,6 +1039,7 @@ fn write_abstract_validator_function(
 /// };
 fn write_concrete_validator_function(
     typegen_context: &'_ TypegenContext<'_>,
+    use_new_flow_casting_syntax: bool,
     fragment_definition: &FragmentDefinition,
     writer: &mut Box<dyn Writer>,
 ) -> FmtResult {
@@ -1092,7 +1110,12 @@ fn write_concrete_validator_function(
 
     match typegen_language {
         TypegenLanguage::Flow | TypegenLanguage::JavaScript => {
-            write!(writer, "(value{}: ", &open_comment)?;
+            let cast_op = if use_new_flow_casting_syntax {
+                " as "
+            } else {
+                ": "
+            };
+            write!(writer, "(value{}{cast_op}", &open_comment)?;
             writer.write(&AST::Any)?;
             write!(writer, "{}) ", &close_comment)?;
         }

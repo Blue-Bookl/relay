@@ -78,7 +78,7 @@ export type queryMixedProvidedVar_MultiFragment = {|
   "__relay_internal__pv__includeNameProvider": require('includeNameProvider'),
   "__relay_internal__pv__numberOfFriendsProvider": require('numberOfFriendsProvider'),
   "__relay_internal__pv__skipFirstnameProvider": require('skipFirstnameProvider')
-}: {|
+} as {|
   +__relay_internal__pv__includeNameProvider: {|
     +get: () => CustomBoolean,
   |},
@@ -107,7 +107,7 @@ export type queryMixedProvidedVar_OneFragment = {|
 |};
 ({
   "__relay_internal__pv__includeNameProvider": require('includeNameProvider')
-}: {|
+} as {|
   +__relay_internal__pv__includeNameProvider: {|
     +get: () => CustomBoolean,
   |},

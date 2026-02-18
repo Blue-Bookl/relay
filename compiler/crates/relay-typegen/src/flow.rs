@@ -20,6 +20,7 @@ use crate::writer::Writer;
 pub struct FlowPrinter {
     result: String,
     indentation: usize,
+    use_new_flow_casting_syntax: bool,
 }
 
 impl Write for FlowPrinter {
@@ -86,7 +87,11 @@ impl Writer for FlowPrinter {
     }
 
     fn write_type_assertion(&mut self, name: &str, value: &AST) -> FmtResult {
-        write!(&mut self.result, "({name}: ")?;
+        if self.use_new_flow_casting_syntax {
+            write!(&mut self.result, "({name} as ")?;
+        } else {
+            write!(&mut self.result, "({name}: ")?;
+        }
         self.write(value)?;
         writeln!(&mut self.result, ");")
     }
@@ -152,10 +157,11 @@ impl Writer for FlowPrinter {
 }
 
 impl FlowPrinter {
-    pub fn new() -> Self {
+    pub fn new(use_new_flow_casting_syntax: bool) -> Self {
         Self {
             result: String::new(),
             indentation: 0,
+            use_new_flow_casting_syntax,
         }
     }
 
@@ -349,10 +355,15 @@ impl FlowPrinter {
             &mut self.result,
             "// A type error here indicates that the type signature of the resolver module is incorrect."
         )?;
-        if arguments.is_empty() {
-            write!(&mut self.result, "({function_name}: (")?;
+        let cast_op = if self.use_new_flow_casting_syntax {
+            " as "
         } else {
-            writeln!(&mut self.result, "({function_name}: (")?;
+            ": "
+        };
+        if arguments.is_empty() {
+            write!(&mut self.result, "({function_name}{cast_op}(")?;
+        } else {
+            writeln!(&mut self.result, "({function_name}{cast_op}(")?;
             self.indentation += 1;
             for argument in arguments.iter() {
                 self.write_indentation()?;
@@ -392,7 +403,7 @@ mod tests {
     use crate::writer::SortedASTList;
 
     fn print_type(ast: &AST) -> String {
-        let mut printer = Box::new(FlowPrinter::new());
+        let mut printer = Box::new(FlowPrinter::new(false));
         printer.write(ast).unwrap();
         printer.into_string()
     }
@@ -595,7 +606,7 @@ mod tests {
 
     #[test]
     fn import_type() {
-        let mut printer = Box::new(FlowPrinter::new());
+        let mut printer = Box::new(FlowPrinter::new(false));
         printer.write_import_type(&["A", "B"], "module").unwrap();
         assert_eq!(
             printer.into_string(),
@@ -605,7 +616,7 @@ mod tests {
 
     #[test]
     fn import_module() {
-        let mut printer = Box::new(FlowPrinter::new());
+        let mut printer = Box::new(FlowPrinter::new(false));
         printer.write_import_module_default("A", "module").unwrap();
         assert_eq!(printer.into_string(), "import A from \"module\";\n");
     }

@@ -31,7 +31,7 @@ import type { FragmentType, DataID } from "relay-runtime";
 import clientUserBestFriendResolverType from "bar";
 // Type assertion validating that `clientUserBestFriendResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
-(clientUserBestFriendResolverType: () => {|
+(clientUserBestFriendResolverType as () => {|
   +id: DataID,
 |});
 declare export opaque type MyFragment$fragmentType: FragmentType;

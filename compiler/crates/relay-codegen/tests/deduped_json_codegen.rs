@@ -5,6 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use std::sync::Arc;
+
+use common::FeatureFlag;
+use common::FeatureFlags;
 use common::SourceLocationKey;
 use fixture_tests::Fixture;
 use graphql_ir::build;
@@ -17,6 +21,10 @@ use relay_test_schema::TEST_SCHEMA;
 pub async fn transform_fixture(fixture: &Fixture<'_>) -> Result<String, String> {
     let project_config = ProjectConfig {
         js_module_format: JsModuleFormat::Haste,
+        feature_flags: Arc::new(FeatureFlags {
+            new_flow_casting_syntax: FeatureFlag::Enabled,
+            ..Default::default()
+        }),
         ..Default::default()
     };
     let mut printer = Printer::with_dedupe(&project_config);

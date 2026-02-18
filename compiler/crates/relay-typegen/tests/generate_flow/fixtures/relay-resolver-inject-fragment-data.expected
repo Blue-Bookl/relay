@@ -19,7 +19,7 @@ import type { relayResolver_PopStarNameResolverFragment_name$data } from "relayR
 import userPopStarNameResolverType from "PopStarNameResolver";
 // Type assertion validating that `userPopStarNameResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
-(userPopStarNameResolverType: (
+(userPopStarNameResolverType as (
   name: relayResolver_PopStarNameResolverFragment_name$data['name'],
 ) => ?unknown);
 export type relayResolver_Query$variables = {||};

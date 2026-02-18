@@ -54,7 +54,7 @@ export type queryOnlyProvidedVar_MultiFragment = {|
 ({
   "__relay_internal__pv__includeNameProvider": require('includeNameProvider'),
   "__relay_internal__pv__numberOfFriendsProvider": require('numberOfFriendsProvider')
-}: {|
+} as {|
   +__relay_internal__pv__includeNameProvider: {|
     +get: () => CustomBoolean,
   |},
@@ -78,7 +78,7 @@ export type queryOnlyProvidedVar_OneFragment = {|
 |};
 ({
   "__relay_internal__pv__includeNameProvider": require('includeNameProvider')
-}: {|
+} as {|
   +__relay_internal__pv__includeNameProvider: {|
     +get: () => CustomBoolean,
   |},

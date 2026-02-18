@@ -30,7 +30,7 @@ export type testQuery = {|
 |};
 ({
   "__relay_internal__pv__includeNameProvider": require('includeNameProvider')
-}: {|
+} as {|
   +__relay_internal__pv__includeNameProvider: {|
     +get: () => ?JSON,
   |},

@@ -40,7 +40,7 @@ import type { relayResolver_BestFriendResolverFragment_name$key } from "relayRes
 import userBestFriendResolverType from "BestFriendResolver";
 // Type assertion validating that `userBestFriendResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
-(userBestFriendResolverType: (
+(userBestFriendResolverType as (
   rootKey: relayResolver_BestFriendResolverFragment_name$key,
 ) => {|
   +id: DataID,

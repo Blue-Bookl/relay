@@ -30,7 +30,7 @@ import type { FragmentType } from "relay-runtime";
 import userPopStarNamesResolverType from "PopStarNameResolver";
 // Type assertion validating that `userPopStarNamesResolverType` resolver is correctly implemented.
 // A type error here indicates that the type signature of the resolver module is incorrect.
-(userPopStarNamesResolverType: (
+(userPopStarNamesResolverType as (
   rootKey: PopStarNameResolverFragment_name$key,
 ) => ?ReadonlyArray<?TestEnums>);
 declare export opaque type Foo_user$fragmentType: FragmentType;
