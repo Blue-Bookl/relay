@@ -72,10 +72,12 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                 initialize_resources();
                 setup_event.stop(timer);
             }
+            let load_compiler_state_timer = setup_event.start("load_compiler_state_time");
             let file_source = FileSource::connect(&self.config, &setup_event).await?;
             let mut compiler_state = file_source
                 .query(&setup_event, self.perf_logger.as_ref())
                 .await?;
+            setup_event.stop(load_compiler_state_timer);
 
             let diagnostics = self
                 .build_projects(&mut compiler_state, &setup_event)
@@ -423,6 +425,7 @@ async fn build_projects<TPerfLogger: PerfLogger + 'static>(
             )
         })
         .collect();
+    let build_commit_state_timer = setup_event.start("build_commit_state_time");
     let mut results = Vec::new();
     let mut errors = Vec::new();
     for result in build_results {
@@ -504,7 +507,9 @@ async fn build_projects<TPerfLogger: PerfLogger + 'static>(
             ))
         }));
     }
+    setup_event.stop(build_commit_state_timer);
 
+    let commit_all_projects_timer = setup_event.start("commit_all_projects_time");
     let mut build_cancelled_during_commit = false;
     let mut all_diagnostics: Vec<Diagnostic> = Vec::new();
     for commit_result in join_all(handles).await {
@@ -531,6 +536,7 @@ async fn build_projects<TPerfLogger: PerfLogger + 'static>(
             }
         }
     }
+    setup_event.stop(commit_all_projects_timer);
 
     if !errors.is_empty() {
         return Err(Error::BuildProjectsErrors { errors });

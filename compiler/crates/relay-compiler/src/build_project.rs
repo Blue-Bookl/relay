@@ -308,6 +308,7 @@ pub fn build_programs(
     log_event: &impl PerfLogEvent,
     perf_logger: Arc<impl PerfLogger + 'static>,
 ) -> Result<BuildProgramsOutput, BuildProjectFailure> {
+    let schema_change_safety_timer = log_event.start("schema_change_safety_time");
     let project_name = project_config.name;
     let mut build_mode = if !compiler_state.has_processed_changes() {
         BuildMode::Full
@@ -349,6 +350,7 @@ pub fn build_programs(
             }
         }
     };
+    log_event.stop(schema_change_safety_timer);
     if !config.has_schema_change_incremental_build {
         // Killswitch here to bail out of schema based incremental builds
         build_mode = if let BuildMode::IncrementalWithSchemaChanges(_) = build_mode {
@@ -415,6 +417,7 @@ pub fn build_programs(
         .collect::<Vec<_>>();
     log_event.stop(validate_and_transform_all_timer);
 
+    let merge_programs_timer = log_event.start("combine_build_programs_time");
     let results: Vec<(Programs, Vec<Diagnostic>)> =
         try_all(validation_results).map_err(|diagnostics| {
             BuildProjectFailure::Error(BuildProjectError::ValidationErrors {
@@ -432,6 +435,7 @@ pub fn build_programs(
             (programs, diagnostics)
         },
     );
+    log_event.stop(merge_programs_timer);
 
     Ok(WithDiagnostics {
         item: (programs, Arc::new(source_hashes)),
@@ -473,7 +477,9 @@ pub fn build_project(
     let ProjectAstData {
         project_asts,
         base_fragment_names,
-    } = get_project_asts(&schema, graphql_asts_map, project_config)?;
+    } = log_event.time("get_asts_time", || {
+        get_project_asts(&schema, graphql_asts_map, project_config)
+    })?;
 
     if compiler_state.should_cancel_current_build() {
         debug!("Build is cancelled: updates in source code/or new file changes are pending.");
@@ -509,11 +515,13 @@ pub fn build_project(
         .collect();
     log_event.stop(artifacts_timer);
 
+    let merge_timer = log_event.start("merge_programs_time");
     let mut iter: std::vec::IntoIter<Programs> = programs.into_iter();
     let mut programs = iter.next().expect("Expect at least one result");
     for temp_programs in iter {
         merge_programs(&mut programs, temp_programs);
     }
+    log_event.stop(merge_timer);
 
     log_event.number(
         "generated_artifacts",
