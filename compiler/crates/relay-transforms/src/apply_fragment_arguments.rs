@@ -517,11 +517,23 @@ impl ApplyFragmentArgumentsTransform<'_, '_, '_> {
         {
             for val in parent_documents {
                 if let ConstantValue::String(name) = val {
-                    metadata.parent_documents.insert(
+                    // Determine the correct ExecutableDefinitionName
+                    // variant based on whether the parent document is
+                    // an operation or a fragment.
+                    let def_name = if self
+                        .program
+                        .operation(OperationDefinitionName(*name))
+                        .is_some()
+                    {
+                        graphql_ir::ExecutableDefinitionName::OperationDefinitionName(
+                            OperationDefinitionName(*name),
+                        )
+                    } else {
                         graphql_ir::ExecutableDefinitionName::FragmentDefinitionName(
                             FragmentDefinitionName(*name),
-                        ),
-                    );
+                        )
+                    };
+                    metadata.parent_documents.insert(def_name);
                 } else {
                     panic!("Expected item in the parent_documents to be a StringKey.")
                 }
