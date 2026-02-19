@@ -42,6 +42,7 @@ export type Arguments = {
 const {VARIABLE, LITERAL, OBJECT_VALUE, LIST_VALUE} = RelayConcreteNode;
 
 const ERRORS_KEY: '__errors' = '__errors';
+const FIELD_GRANULAR_NOTIFICATIONS_KEY = '__fieldGranularNotifications';
 const MODULE_COMPONENT_KEY_PREFIX = '__module_component_';
 const MODULE_OPERATION_KEY_PREFIX = '__module_operation_';
 
@@ -273,6 +274,10 @@ function getModuleOperationKey(documentName: string): string {
   return `${MODULE_OPERATION_KEY_PREFIX}${documentName}`;
 }
 
+function getFieldNotificationKey(dataID: string, storageKey: string): string {
+  return `__fn:${dataID}:${storageKey}`;
+}
+
 /**
  * Constants shared by all implementations of RecordSource/MutableRecordSource/etc.
  */
@@ -286,6 +291,7 @@ const RelayStoreUtils = {
   FRAGMENT_PROP_NAME_KEY: '__fragmentPropName',
   MODULE_COMPONENT_KEY: '__module_component', // alias returned by Reader
   ERRORS_KEY,
+  FIELD_GRANULAR_NOTIFICATIONS_KEY,
   ID_KEY: '__id',
   REF_KEY: '__ref',
   REFS_KEY: '__refs',
@@ -310,6 +316,7 @@ const RelayStoreUtils = {
   getStableStorageKey,
   getModuleComponentKey,
   getModuleOperationKey,
+  getFieldNotificationKey,
 } as const;
 
 module.exports = RelayStoreUtils;

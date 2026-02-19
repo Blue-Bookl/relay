@@ -689,6 +689,25 @@ function getResolverLinkedRecordIDs(
 /**
  * @public
  *
+ * Returns true if the value of a field differs between two records.
+ * Unlike getValue(), this works for all field types (scalar, linked, plural linked).
+ */
+function hasFieldChanged(
+  prevRecord: Record,
+  nextRecord: Record,
+  storageKey: StorageKey,
+): boolean {
+  if (!areEqual(prevRecord[storageKey], nextRecord[storageKey])) {
+    return true;
+  }
+  const prevErrors = prevRecord[ERRORS_KEY]?.[storageKey];
+  const nextErrors = nextRecord[ERRORS_KEY]?.[storageKey];
+  return !areEqual(prevErrors, nextErrors);
+}
+
+/**
+ * @public
+ *
  * Convert a record to JSON.
  */
 function toJSON<TMaybe: ?empty = empty>(
@@ -714,6 +733,7 @@ module.exports = {
   getResolverLinkedRecordIDs,
   getType,
   getValue,
+  hasFieldChanged,
   hasLinkedRecordID,
   hasLinkedRecordIDs,
   hasValue,

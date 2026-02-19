@@ -55,7 +55,12 @@ const RelayReader = require('./RelayReader');
 const RelayReferenceMarker = require('./RelayReferenceMarker');
 const RelayStoreSubscriptions = require('./RelayStoreSubscriptions');
 const RelayStoreUtils = require('./RelayStoreUtils');
-const {ROOT_ID, ROOT_TYPE} = require('./RelayStoreUtils');
+const {
+  FIELD_GRANULAR_NOTIFICATIONS_KEY,
+  ROOT_ID,
+  ROOT_TYPE,
+  getFieldNotificationKey,
+} = require('./RelayStoreUtils');
 const invariant = require('invariant');
 
 export opaque type InvalidationState = {
@@ -905,6 +910,13 @@ class RelayModernStore implements Store {
 function initializeRecordSource(target: MutableRecordSource) {
   if (!target.has(ROOT_ID)) {
     const rootRecord = RelayModernRecord.create(ROOT_ID, ROOT_TYPE);
+    if (RelayFeatureFlags.ENABLE_FIELD_GRANULAR_NOTIFICATIONS) {
+      RelayModernRecord.setValue(
+        rootRecord,
+        FIELD_GRANULAR_NOTIFICATIONS_KEY,
+        true,
+      );
+    }
     target.set(ROOT_ID, rootRecord);
   }
 }
@@ -989,6 +1001,32 @@ function updateTargetFromSource(
         }
         updatedRecordIDs.add(dataID);
         target.set(dataID, nextRecord);
+
+        // Add per-field notification keys for field-granular records
+        if (
+          RelayModernRecord.getValue(
+            nextRecord,
+            FIELD_GRANULAR_NOTIFICATIONS_KEY,
+          )
+        ) {
+          const fields = RelayModernRecord.getFields(nextRecord);
+          for (let jj = 0; jj < fields.length; jj++) {
+            const storageKey = fields[jj];
+            // Skip internal metadata keys (all start with '__')
+            if (storageKey.startsWith('__')) {
+              continue;
+            }
+            if (
+              RelayModernRecord.hasFieldChanged(
+                targetRecord,
+                nextRecord,
+                storageKey,
+              )
+            ) {
+              updatedRecordIDs.add(getFieldNotificationKey(dataID, storageKey));
+            }
+          }
+        }
       }
     } else if (sourceRecord === null) {
       target.delete(dataID);

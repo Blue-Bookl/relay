@@ -58,6 +58,7 @@ const RelayConcreteVariables = require('./RelayConcreteVariables');
 const RelayModernRecord = require('./RelayModernRecord');
 const {
   CLIENT_EDGE_TRAVERSAL_PATH,
+  FIELD_GRANULAR_NOTIFICATIONS_KEY,
   FRAGMENT_OWNER_KEY,
   FRAGMENT_PROP_NAME_KEY,
   FRAGMENTS_KEY,
@@ -65,6 +66,7 @@ const {
   MODULE_COMPONENT_KEY,
   ROOT_ID,
   getArgumentValues,
+  getFieldNotificationKey,
   getModuleComponentKey,
   getStorageKey,
 } = require('./RelayStoreUtils');
@@ -103,6 +105,7 @@ class RelayReader {
   _missingLiveResolverFields: Array<DataID>;
   _isWithinUnmatchedTypeRefinement: boolean;
   _fieldErrors: ?FieldErrors;
+  _fieldGranularNotificationDataID: ?DataID;
   _owner: RequestDescriptor;
   // Exec time resolvers are run before reaching the Relay store so the store already contains
   // the normalized data; the same as if the data were sent from the server. However, since a
@@ -138,6 +141,7 @@ class RelayReader {
     this._isMissingData = false;
     this._isWithinUnmatchedTypeRefinement = false;
     this._fieldErrors = null;
+    this._fieldGranularNotificationDataID = null;
     this._owner = selector.owner;
     this._useExecTimeResolvers =
       this._owner.node.operation.use_exec_time_resolvers ??
@@ -312,11 +316,21 @@ class RelayReader {
     prevData: ?SelectorData,
   ): ?SelectorData {
     const record = this._recordSource.get(dataID);
-    this._seenRecords.add(dataID);
+    const prevFieldGranularDataID = this._fieldGranularNotificationDataID;
+    if (
+      record != null &&
+      RelayModernRecord.getValue(record, FIELD_GRANULAR_NOTIFICATIONS_KEY)
+    ) {
+      this._fieldGranularNotificationDataID = dataID;
+    } else {
+      this._seenRecords.add(dataID);
+      this._fieldGranularNotificationDataID = null;
+    }
     if (record == null) {
       if (record === undefined) {
         this._markDataAsMissing('<record>');
       }
+      this._fieldGranularNotificationDataID = prevFieldGranularDataID;
       // $FlowFixMe[incompatible-type]
       return record;
     }
@@ -326,6 +340,7 @@ class RelayReader {
       record,
       data,
     );
+    this._fieldGranularNotificationDataID = prevFieldGranularDataID;
     return hadRequiredData ? data : null;
   }
 
@@ -1171,6 +1186,14 @@ class RelayReader {
   ): ?unknown {
     const fieldName = field.alias ?? field.name;
     const storageKey = getStorageKey(field, this._variables);
+    if (this._fieldGranularNotificationDataID != null) {
+      this._seenRecords.add(
+        getFieldNotificationKey(
+          this._fieldGranularNotificationDataID,
+          storageKey,
+        ),
+      );
+    }
     const value = RelayModernRecord.getValue(record, storageKey);
     if (
       value === null ||
@@ -1193,6 +1216,14 @@ class RelayReader {
   ): ?unknown {
     const fieldName = field.alias ?? field.name;
     const storageKey = getStorageKey(field, this._variables);
+    if (this._fieldGranularNotificationDataID != null) {
+      this._seenRecords.add(
+        getFieldNotificationKey(
+          this._fieldGranularNotificationDataID,
+          storageKey,
+        ),
+      );
+    }
     const linkedID = RelayModernRecord.getLinkedRecordID(record, storageKey);
     if (linkedID == null) {
       data[fieldName] = linkedID;
@@ -1328,6 +1359,14 @@ class RelayReader {
     data: SelectorData,
   ): ?unknown {
     const storageKey = getStorageKey(field, this._variables);
+    if (this._fieldGranularNotificationDataID != null) {
+      this._seenRecords.add(
+        getFieldNotificationKey(
+          this._fieldGranularNotificationDataID,
+          storageKey,
+        ),
+      );
+    }
     const linkedIDs = RelayModernRecord.getLinkedRecordIDs(record, storageKey);
     if (
       linkedIDs === null ||
