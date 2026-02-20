@@ -618,7 +618,22 @@ pub enum ValidationMessageWithData {
     },
 
     #[error("Unknown argument '{argument_name}'.{suggestions}", suggestions = did_you_mean(suggestions))]
-    UnknownArgument {
+    UnknownFragmentArgument {
+        argument_name: StringKey,
+        suggestions: Vec<StringKey>,
+    },
+
+    #[error("Unknown argument '{argument_name}' on directive '@{directive_name}'.{suggestions}", suggestions = did_you_mean(suggestions))]
+    UnknownDirectiveArgument {
+        directive_name: StringKey,
+        argument_name: StringKey,
+        suggestions: Vec<StringKey>,
+    },
+
+    #[error("Unknown argument '{argument_name}' on field '{parent_type_name}.{field_name}'.{suggestions}", suggestions = did_you_mean(suggestions))]
+    UnknownFieldArgument {
+        parent_type_name: StringKey,
+        field_name: StringKey,
         argument_name: StringKey,
         suggestions: Vec<StringKey>,
     },
@@ -632,7 +647,9 @@ pub enum ValidationMessageWithData {
 impl WithDiagnosticData for ValidationMessageWithData {
     fn get_data(&self) -> Vec<Box<dyn DiagnosticDisplay>> {
         match self {
-            ValidationMessageWithData::UnknownArgument { suggestions, .. }
+            ValidationMessageWithData::UnknownFragmentArgument { suggestions, .. }
+            | ValidationMessageWithData::UnknownFieldArgument { suggestions, .. }
+            | ValidationMessageWithData::UnknownDirectiveArgument { suggestions, .. }
             | ValidationMessageWithData::UnknownType { suggestions, .. }
             | ValidationMessageWithData::UnknownField { suggestions, .. }
             | ValidationMessageWithData::UndefinedFragment { suggestions, .. } => suggestions

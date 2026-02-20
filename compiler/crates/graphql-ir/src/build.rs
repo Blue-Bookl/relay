@@ -753,7 +753,7 @@ impl<'schema, 'signatures, 'options> Builder<'schema, 'signatures, 'options> {
                 let suggestions =
                     suggestion_list::suggestion_list(arg.name.value, &possible_argument_names, 5);
                 Err(vec![Diagnostic::error_with_data(
-                    ValidationMessageWithData::UnknownArgument {
+                    ValidationMessageWithData::UnknownFragmentArgument {
                         argument_name: arg.name.value,
                         suggestions,
                     },
@@ -1102,6 +1102,12 @@ impl<'schema, 'signatures, 'options> Builder<'schema, 'signatures, 'options> {
                     true
                 }
             },
+            |argument_name, suggestions| ValidationMessageWithData::UnknownFieldArgument {
+                parent_type_name: self.schema.get_type_name(parent_type.inner()),
+                field_name: field.name.value,
+                argument_name,
+                suggestions,
+            },
         );
         let selections = self.build_selections(
             &field.selections.items,
@@ -1179,6 +1185,12 @@ impl<'schema, 'signatures, 'options> Builder<'schema, 'signatures, 'options> {
             &field.arguments,
             &field_definition.arguments,
             |_| true,
+            |argument_name, suggestions| ValidationMessageWithData::UnknownFieldArgument {
+                parent_type_name: self.schema.get_type_name(parent_type.inner()),
+                field_name: field.name.value,
+                argument_name,
+                suggestions,
+            },
         );
         let directives = self.build_directives(&field.directives, DirectiveLocation::Field);
         let (arguments, directives) = try2(arguments, directives)?;
@@ -1284,6 +1296,7 @@ impl<'schema, 'signatures, 'options> Builder<'schema, 'signatures, 'options> {
         arguments: &Option<graphql_syntax::List<graphql_syntax::Argument>>,
         argument_definitions: &ArgumentDefinitions,
         is_non_nullable_field_required: impl Fn(&StringKey) -> bool,
+        get_unknown_argument_message: impl Fn(StringKey, Vec<StringKey>) -> ValidationMessageWithData,
     ) -> DiagnosticsResult<Vec<Argument>> {
         let ir_arguments = if let Some(arguments) = arguments {
             // check for duplicate arguments
@@ -1321,10 +1334,7 @@ impl<'schema, 'signatures, 'options> Builder<'schema, 'signatures, 'options> {
                             5,
                         );
                         Err(vec![Diagnostic::error_with_data(
-                            ValidationMessageWithData::UnknownArgument {
-                                argument_name: argument.name.value,
-                                suggestions,
-                            },
+                            get_unknown_argument_message(argument.name.value, suggestions),
                             self.location.with_span(argument.name.span),
                         )])
                     }
@@ -1454,6 +1464,11 @@ impl<'schema, 'signatures, 'options> Builder<'schema, 'signatures, 'options> {
             &directive.arguments,
             &directive_definition.arguments,
             |_| true,
+            |argument_name, suggestions| ValidationMessageWithData::UnknownDirectiveArgument {
+                directive_name: directive.name.value,
+                argument_name,
+                suggestions,
+            },
         )?;
         Ok(Directive {
             name: WithLocation::from_span(
