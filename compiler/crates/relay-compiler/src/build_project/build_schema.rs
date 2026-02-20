@@ -11,9 +11,11 @@ use common::DiagnosticsResult;
 use common::PerfLogEvent;
 use fnv::FnvHashMap;
 use relay_config::ProjectName;
+use relay_config::SchemaLocation;
 use relay_docblock::validate_resolver_schema;
 use schema::SDLSchema;
 use schema::SchemaDocuments;
+use schema::build_schema_with_flat_buffer_unchecked;
 use schema::parse_schema_with_extensions;
 use schema_validate_lib::SchemaValidationOptions;
 use schema_validate_lib::validate;
@@ -47,6 +49,40 @@ pub fn build_schema(
     )
 }
 
+fn load_flatbuffer_schema(project_config: &ProjectConfig) -> Option<SDLSchema> {
+    let fb_path = match &project_config.schema_location {
+        SchemaLocation::Directory(dir) => {
+            let mut fb_path = dir.clone();
+            let dir_name = fb_path.file_name()?.to_str()?.to_string();
+            fb_path.pop();
+            fb_path.push(format!("{}.flatbuffer", dir_name));
+            fb_path
+        }
+        SchemaLocation::File(file) => file.with_extension("flatbuffer"),
+    };
+    if !fb_path.exists() {
+        return None;
+    }
+    match std::fs::read(&fb_path) {
+        Ok(bytes) => {
+            log::info!(
+                "Loading FlatBuffer schema from {:?} ({} bytes)",
+                fb_path,
+                bytes.len()
+            );
+            Some(build_schema_with_flat_buffer_unchecked(bytes))
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to read FlatBuffer schema {:?}: {}, falling back to SDL",
+                fb_path,
+                e,
+            );
+            None
+        }
+    }
+}
+
 fn build_schema_impl(
     compiler_state: &CompilerState,
     project_config: &ProjectConfig,
@@ -54,6 +90,10 @@ fn build_schema_impl(
     config: &Config,
     graphql_asts_map: &FnvHashMap<ProjectName, GraphQLAsts>,
 ) -> DiagnosticsResult<Arc<SDLSchema>> {
+    if let Some(schema) = load_flatbuffer_schema(project_config) {
+        return Ok(Arc::new(schema));
+    }
+
     let schema_sources = get_schema_sources(compiler_state, project_config);
     let extensions = get_extension_sources(compiler_state, project_config);
 
