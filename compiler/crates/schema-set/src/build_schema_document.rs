@@ -151,11 +151,16 @@ impl ToSDLDefinition<Option<SchemaDefinition>> for SetRootSchema {
 
 impl ToSDLDefinition<DirectiveDefinition> for SetDirective {
     fn to_sdl_definition(&self) -> DirectiveDefinition {
+        // NOTE: we do NOT sort strictly alphabetically, but instead by the ordering in the SPEC
+        // https://spec.graphql.org/draft/#DirectiveLocation
+        // That ordering is followed in the DirectiveLocation enum
+        let mut locations = self.locations.clone();
+        locations.sort();
         DirectiveDefinition {
             name: build_name(self.name.0),
             arguments: build_argument_definitions(&self.arguments),
             repeatable: self.repeatable,
-            locations: self.locations.clone(),
+            locations,
             description: build_description(&self.definition),
             span: Span::empty(),
             hack_source: build_hack_source(&self.definition),
@@ -616,5 +621,34 @@ fn build_string_node(value: StringKey) -> StringNode {
     StringNode {
         token: build_token(TokenKind::BlockStringLiteral),
         value,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use common::SourceLocationKey;
+    use graphql_syntax::parse_schema_document;
+
+    use super::*;
+
+    fn set_from_str(sdl: &str) -> SchemaSet {
+        SchemaSet::from_schema_documents(&[parse_schema_document(
+            sdl,
+            SourceLocationKey::generated(),
+        )
+        .unwrap()])
+    }
+
+    #[test]
+    fn test_directive_locations_sorted_alphabetically() {
+        // Verify that to_sdl_definition() sorts directive locations by https://spec.graphql.org/draft/#DirectiveLocation,
+        // regardless of the input order.
+        let schema = set_from_str("directive @x on SUBSCRIPTION | QUERY | FIELD | MUTATION");
+        let sdl = format!("{}", schema.to_sdl_definition());
+        assert!(
+            sdl.contains("directive @x on QUERY | MUTATION | SUBSCRIPTION | FIELD"),
+            "Expected directive locations to be sorted by location, got: {}",
+            sdl,
+        );
     }
 }

@@ -501,6 +501,7 @@ pub struct DirectiveDefinition {
 
 #[derive(PartialEq, Eq, Ord, PartialOrd, Hash, Debug, Clone, Copy)]
 pub enum DirectiveLocation {
+    // Preserve the ordering as defined in the spec: https://spec.graphql.org/draft/#DirectiveLocation
     Query,
     Mutation,
     Subscription,
