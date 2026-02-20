@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::hash::Hash;
 
@@ -13,10 +14,14 @@ use common::DirectiveName;
 use common::WithLocation;
 use dashmap::DashMap;
 use fnv::FnvBuildHasher;
+use graphql_syntax::DirectiveLocation;
 use intern::Lookup;
 use intern::string_key::Intern;
 use intern::string_key::StringKey;
 use ouroboros::self_referencing;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 
 use super::FlatBufferSchema;
 use crate::Argument;
@@ -74,6 +79,7 @@ pub struct SchemaWrapper {
     scalars: Cache<ScalarID, Scalar>,
     fields: Cache<FieldID, Field>,
     objects: Cache<ObjectID, Object>,
+    type_map: Cache<(), Vec<(StringKey, Type)>>,
     fb: OwnedFlatBufferSchema,
 }
 impl fmt::Debug for SchemaWrapper {
@@ -124,6 +130,7 @@ impl SchemaWrapper {
             scalars: Cache::new(),
             fields: Cache::new(),
             objects: Cache::new(),
+            type_map: Cache::new(),
             fb,
         };
 
@@ -213,14 +220,65 @@ impl SchemaWrapper {
     }
 
     pub fn get_directives(&self) -> Vec<&Directive> {
-        todo!()
+        let fb = self.flatbuffer_schema();
+        (0..fb.directives.len())
+            .filter_map(|i| {
+                let name = DirectiveName(fb.directives.get(i).name().intern());
+                self.get_directive(name)
+            })
+            .collect()
     }
 
     pub fn get_type_map(&self) -> impl Iterator<Item = (&StringKey, &Type)> {
-        if true {
-            todo!();
+        let type_map = self.type_map.get((), || {
+            let fb = self.flatbuffer_schema();
+            (0..fb.types.len())
+                .filter_map(|i| {
+                    let entry = fb.types.get(i);
+                    let name = entry.name().intern();
+                    let type_ = fb.parse_type(entry.value()?);
+                    Some((name, type_))
+                })
+                .collect()
+        });
+        type_map.iter().map(|(k, v)| (k, v))
+    }
+
+    pub fn get_type_map_par_iter(&self) -> impl ParallelIterator<Item = (&StringKey, &Type)> {
+        let type_map = self.type_map.get((), || {
+            let fb = self.flatbuffer_schema();
+            (0..fb.types.len())
+                .filter_map(|i| {
+                    let entry = fb.types.get(i);
+                    let name = entry.name().intern();
+                    let type_ = fb.parse_type(entry.value()?);
+                    Some((name, type_))
+                })
+                .collect()
+        });
+        type_map.par_iter().map(|(k, v)| (k, v))
+    }
+
+    pub fn directives_for_location(&self, location: DirectiveLocation) -> Vec<&Directive> {
+        let fb = self.flatbuffer_schema();
+        (0..fb.directives.len())
+            .filter_map(|i| {
+                let name = DirectiveName(fb.directives.get(i).name().intern());
+                self.get_directive(name)
+            })
+            .filter(|directive| directive.locations.contains(&location))
+            .collect()
+    }
+
+    pub fn get_enums_par_iter(&self) -> impl ParallelIterator<Item = &Enum> {
+        let fb = self.flatbuffer_schema();
+        if self.enums.map.len() < fb.enums.len() {
+            for i in 0..fb.enums.len() {
+                self.enum_(EnumID(i.try_into().unwrap()));
+            }
         }
-        (vec![]).into_iter()
+        let enums: Vec<&Enum> = self.enums.map.iter().map(|ref_| *ref_.value()).collect();
+        enums.into_par_iter()
     }
 
     fn flatbuffer_schema(&self) -> &FlatBufferSchema<'_> {
@@ -395,7 +453,35 @@ impl Schema for SchemaWrapper {
     }
 
     fn snapshot_print(&self) -> String {
-        todo!()
+        let query_type = self.query_type();
+        let mutation_type = self.mutation_type();
+        let subscription_type = self.subscription_type();
+        let mut ordered_directives = self.get_directives();
+        ordered_directives.sort_by_key(|dir| dir.name.item.0.lookup());
+        let ordered_type_map: BTreeMap<_, _> = self.get_type_map().collect();
+        let enums: Vec<_> = self.enums().collect();
+        let fields: Vec<_> = self.fields().collect();
+        let input_objects: Vec<_> = self.input_objects().collect();
+        let interfaces: Vec<_> = self.interfaces().collect();
+        let objects: Vec<_> = self.objects().collect();
+        let scalars: Vec<_> = self.scalars().collect();
+        let unions: Vec<_> = self.unions().collect();
+        format!(
+            r#"Schema {{
+  query_type: {query_type:#?}
+  mutation_type: {mutation_type:#?}
+  subscription_type: {subscription_type:#?}
+  directives: {ordered_directives:#?}
+  type_map: {ordered_type_map:#?}
+  enums: {enums:#?}
+  fields: {fields:#?}
+  input_objects: {input_objects:#?}
+  interfaces: {interfaces:#?}
+  objects: {objects:#?}
+  scalars: {scalars:#?}
+  unions: {unions:#?}
+  }}"#,
+        )
     }
 
     fn input_objects<'a>(&'a self) -> Box<dyn Iterator<Item = &'a InputObject> + 'a> {

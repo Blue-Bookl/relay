@@ -18,6 +18,45 @@ use crate::flatbuffer::SchemaWrapper;
 use crate::graphql_schema::Schema;
 use crate::in_memory::InMemorySchema;
 
+enum EitherIter<A, B> {
+    A(A),
+    B(B),
+}
+impl<I, A: Iterator<Item = I>, B: Iterator<Item = I>> Iterator for EitherIter<A, B> {
+    type Item = I;
+    fn next(&mut self) -> Option<I> {
+        match self {
+            Self::A(a) => a.next(),
+            Self::B(b) => b.next(),
+        }
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            Self::A(a) => a.size_hint(),
+            Self::B(b) => b.size_hint(),
+        }
+    }
+}
+
+enum EitherParIter<A, B> {
+    A(A),
+    B(B),
+}
+impl<I: Send, A: ParallelIterator<Item = I>, B: ParallelIterator<Item = I>> ParallelIterator
+    for EitherParIter<A, B>
+{
+    type Item = I;
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        match self {
+            Self::A(a) => a.drive_unindexed(consumer),
+            Self::B(b) => b.drive_unindexed(consumer),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum SDLSchema {
     InMemory(InMemorySchema),
@@ -343,73 +382,58 @@ impl SDLSchema {
 
     pub fn get_type_map(&self) -> impl Iterator<Item = (&StringKey, &Type)> {
         match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_type_map(),
+            SDLSchema::FlatBuffer(schema) => EitherIter::A(schema.get_type_map()),
+            SDLSchema::InMemory(schema) => EitherIter::B(schema.get_type_map()),
         }
     }
 
     pub fn get_type_map_par_iter(&self) -> impl ParallelIterator<Item = (&StringKey, &Type)> {
         match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_type_map_par_iter(),
+            SDLSchema::FlatBuffer(schema) => EitherParIter::A(schema.get_type_map_par_iter()),
+            SDLSchema::InMemory(schema) => EitherParIter::B(schema.get_type_map_par_iter()),
         }
     }
 
     pub fn get_directives(&self) -> impl Iterator<Item = &Directive> {
         match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_directives(),
+            SDLSchema::FlatBuffer(schema) => EitherIter::A(schema.get_directives().into_iter()),
+            SDLSchema::InMemory(schema) => EitherIter::B(schema.get_directives()),
         }
     }
 
     /// Returns all directives applicable for a given location(Query, Field, etc).
     pub fn directives_for_location(&self, location: DirectiveLocation) -> Vec<&Directive> {
         match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
+            SDLSchema::FlatBuffer(schema) => schema.directives_for_location(location),
             SDLSchema::InMemory(schema) => schema.directives_for_location(location),
         }
     }
 
     pub fn get_fields(&self) -> impl Iterator<Item = &Field> {
-        match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_fields(),
-        }
+        Schema::fields(self)
     }
 
     pub fn get_interfaces(&self) -> impl Iterator<Item = &Interface> {
-        match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_interfaces(),
-        }
+        Schema::interfaces(self)
     }
 
     pub fn get_enums(&self) -> impl Iterator<Item = &Enum> {
-        match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_enums(),
-        }
+        Schema::enums(self)
     }
 
     pub fn get_enums_par_iter(&self) -> impl ParallelIterator<Item = &Enum> {
         match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_enums_par_iter(),
+            SDLSchema::FlatBuffer(schema) => EitherParIter::A(schema.get_enums_par_iter()),
+            SDLSchema::InMemory(schema) => EitherParIter::B(schema.get_enums_par_iter()),
         }
     }
 
     pub fn get_objects(&self) -> impl Iterator<Item = &Object> {
-        match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_objects(),
-        }
+        Schema::objects(self)
     }
 
     pub fn get_unions(&self) -> impl Iterator<Item = &Union> {
-        match self {
-            SDLSchema::FlatBuffer(_schema) => todo!(),
-            SDLSchema::InMemory(schema) => schema.get_unions(),
-        }
+        Schema::unions(self)
     }
 
     pub fn has_directive(&self, directive_name: DirectiveName) -> bool {
