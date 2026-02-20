@@ -355,14 +355,17 @@ fn print_input_field_with_description(field: &SetArgument) -> String {
 
 impl PrintableDefinition for SetDirective {
     fn print_definition(&self) -> String {
-        let mut sorted_locations = self
-            .locations
+        // NOTE: we do NOT sort strictly alphabetically, but instead by the ordering in the SPEC
+        // https://spec.graphql.org/draft/#DirectiveLocation
+        // That ordering is followed in the DirectiveLocation enum
+        let mut sorted_locations = self.locations.clone();
+        sorted_locations.sort();
+
+        let printed_locations = sorted_locations
             .iter()
             .map(|loc| loc.to_string())
-            .collect::<Vec<_>>();
-
-        sorted_locations.sort();
-        let printed_locations = sorted_locations.join(" | ");
+            .collect::<Vec<_>>()
+            .join(" | ");
         format!(
             "{}directive @{name}{arguments} on {locations}",
             print_description(self),
