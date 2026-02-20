@@ -605,3 +605,105 @@ describe('unmount', () => {
     );
   });
 });
+
+// $FlowFixMe[missing-export] Not yet exists in the Flow types in OSS
+const Activity = React.unstable_Activity;
+
+describe('<Activity> compatibility', () => {
+  let setMode;
+
+  const renderWithActivity = async (env: RelayMockEnvironment) => {
+    let commitFn;
+    function Renderer() {
+      const [c, isMutationInFlight] = useMutation(CommentCreateMutation);
+      commitFn = c;
+      isInFlightFn(isMutationInFlight);
+      return null;
+    }
+
+    function Wrapper() {
+      const [mode, setModeFn] = useState('visible');
+      setMode = setModeFn;
+      return (
+        <RelayEnvironmentProvider environment={env}>
+          {/* $FlowFixMe[incompatible-type] */}
+          {/* $FlowFixMe[not-a-component] */}
+          <Activity mode={mode}>
+            <Renderer />
+          </Activity>
+        </RelayEnvironmentProvider>
+      );
+    }
+
+    await ReactTestingLibrary.act(() => {
+      instance = ReactTestingLibrary.render(<Wrapper />);
+    });
+    commit = async (config: any) =>
+      await ReactTestingLibrary.act(() => {
+        disposable = commitFn(config);
+      });
+  };
+
+  it('reconciles isInFlight when mutation completes while hidden', async () => {
+    await renderWithActivity(environment);
+    expect(isInFlightFn).toHaveBeenLastCalledWith(false);
+
+    // Start a mutation
+    isInFlightFn.mockClear();
+    await commit({variables});
+    expect(isInFlightFn).toHaveBeenLastCalledWith(true);
+
+    // Hide the component (simulates navigating to another tab)
+    isInFlightFn.mockClear();
+    await ReactTestingLibrary.act(() => {
+      setMode('hidden');
+    });
+
+    // Mutation completes while hidden
+    // $FlowFixMe[method-unbinding] added when improving typing for this parameters
+    const operation = environment.executeMutation.mock.calls[0][0].operation;
+    await ReactTestingLibrary.act(() =>
+      environment.mock.resolve(operation, data),
+    );
+
+    // Show the component again (simulates navigating back)
+    isInFlightFn.mockClear();
+    await ReactTestingLibrary.act(() => {
+      setMode('visible');
+    });
+
+    // isInFlight should be false, not stuck as true
+    expect(isInFlightFn).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps isInFlight true when mutation is still in-flight after re-show', async () => {
+    await renderWithActivity(environment);
+    await commit({variables});
+    expect(isInFlightFn).toHaveBeenLastCalledWith(true);
+
+    // Hide
+    await ReactTestingLibrary.act(() => {
+      setMode('hidden');
+    });
+
+    // Do NOT resolve mutation - it's still in flight
+
+    // Show again
+    isInFlightFn.mockClear();
+    await ReactTestingLibrary.act(() => {
+      setMode('visible');
+    });
+
+    // isInFlight should still be true since mutation hasn't completed
+    expect(isInFlightFn).toHaveBeenLastCalledWith(true);
+
+    // Now resolve the mutation
+    isInFlightFn.mockClear();
+    // $FlowFixMe[method-unbinding] added when improving typing for this parameters
+    const operation = environment.executeMutation.mock.calls[0][0].operation;
+    await ReactTestingLibrary.act(() =>
+      environment.mock.resolve(operation, data),
+    );
+    expect(isInFlightFn).toHaveBeenLastCalledWith(false);
+  });
+});
