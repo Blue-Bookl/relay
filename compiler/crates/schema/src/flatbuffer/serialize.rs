@@ -31,20 +31,20 @@ use crate::FieldID;
 use crate::InputObjectID;
 use crate::InterfaceID;
 use crate::ObjectID;
+use crate::SDLSchema;
 use crate::ScalarID;
 use crate::Schema;
 use crate::Type;
 use crate::TypeReference;
 use crate::UnionID;
-use crate::in_memory::InMemorySchema;
 
-pub fn serialize_as_flatbuffer(schema: &InMemorySchema) -> Vec<u8> {
+pub fn serialize_as_flatbuffer(schema: &SDLSchema) -> Vec<u8> {
     let mut serializer = Serializer::new(schema);
     serializer.serialize_schema()
 }
 
 struct Serializer<'fb, 'schema> {
-    schema: &'schema InMemorySchema,
+    schema: &'schema SDLSchema,
     bldr: FlatBufferBuilder<'fb>,
     scalars: Vec<WIPOffset<schema_flatbuffer::Scalar<'fb>>>,
     input_objects: Vec<WIPOffset<schema_flatbuffer::InputObject<'fb>>>,
@@ -59,7 +59,7 @@ struct Serializer<'fb, 'schema> {
 }
 
 impl<'fb, 'schema> Serializer<'fb, 'schema> {
-    fn new(schema: &'schema InMemorySchema) -> Self {
+    fn new(schema: &'schema SDLSchema) -> Self {
         Self {
             schema,
             bldr: FlatBufferBuilder::new(),

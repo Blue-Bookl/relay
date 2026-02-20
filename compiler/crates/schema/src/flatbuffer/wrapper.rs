@@ -95,6 +95,20 @@ impl SchemaWrapper {
         }
         .build();
 
+        Self::init(fb)
+    }
+
+    pub fn from_vec_unchecked(data: Vec<u8>) -> Self {
+        let fb = OwnedFlatBufferSchemaBuilder {
+            data,
+            schema_builder: |data| FlatBufferSchema::build_unchecked(data),
+        }
+        .build();
+
+        Self::init(fb)
+    }
+
+    fn init(fb: OwnedFlatBufferSchema) -> Self {
         let mut result = Self {
             clientid_field_name: "__id".intern(),
             strongid_field_name: "strong_id__".intern(),
@@ -493,7 +507,7 @@ mod tests {
         let sdl = "
         type Query { id: ID }
         ";
-        let sdl_schema = build_schema(sdl)?.unwrap_in_memory_impl();
+        let sdl_schema = build_schema(sdl)?;
         let bytes = serialize_as_flatbuffer(&sdl_schema);
         let fb_schema = SchemaWrapper::from_vec(bytes);
 
@@ -515,7 +529,7 @@ mod tests {
         let sdl = "
         type Query { id: ID }
         ";
-        let sdl_schema = build_schema(sdl)?.unwrap_in_memory_impl();
+        let sdl_schema = build_schema(sdl)?;
         let bytes = serialize_as_flatbuffer(&sdl_schema);
         let fb_schema = SchemaWrapper::from_vec(bytes);
 
@@ -544,7 +558,7 @@ mod tests {
         type MailingAddress { id: ID }
         type Country { id: ID }
         ";
-        let sdl_schema = build_schema(sdl)?.unwrap_in_memory_impl();
+        let sdl_schema = build_schema(sdl)?;
         let bytes = serialize_as_flatbuffer(&sdl_schema);
         let fb_schema = SchemaWrapper::from_vec(bytes);
 
@@ -569,7 +583,7 @@ mod tests {
         type MailingAddress { id: ID }
         type Country { id: ID }
         ";
-        let sdl_schema = build_schema(sdl)?.unwrap_in_memory_impl();
+        let sdl_schema = build_schema(sdl)?;
         let bytes = serialize_as_flatbuffer(&sdl_schema);
         let fb_schema = SchemaWrapper::from_vec(bytes);
 

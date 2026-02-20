@@ -75,6 +75,15 @@ impl<'fb> FlatBufferSchema<'fb> {
             schema_flatbuffer::root_as_schema_with_opts(&opts, bytes)
                 .expect("Failed to get root as schema");
 
+        Self::from_flatbuffer_schema(fb_schema)
+    }
+
+    pub fn build_unchecked(bytes: &'fb [u8]) -> Self {
+        let flatbuffer_schema = unsafe { schema_flatbuffer::root_as_schema_unchecked(bytes) };
+        Self::from_flatbuffer_schema(flatbuffer_schema)
+    }
+
+    fn from_flatbuffer_schema(fb_schema: schema_flatbuffer::Schema<'fb>) -> Self {
         let query_type = Type::Object(ObjectID(fb_schema.query_type()));
         let mutation_type = fb_schema
             .has_mutation_type()
@@ -625,7 +634,7 @@ mod tests {
         type MailingAddress { id: ID }
         type Country { id: ID }
         ";
-        let sdl_schema = build_schema(sdl)?.unwrap_in_memory_impl();
+        let sdl_schema = build_schema(sdl)?;
         let bytes = serialize_as_flatbuffer(&sdl_schema);
         let fb_schema = FlatBufferSchema::build(&bytes);
 

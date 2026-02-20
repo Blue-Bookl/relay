@@ -51,7 +51,6 @@ pub async fn transform_fixture(fixture: &Fixture<'_>) -> Result<String, String> 
 }
 
 fn print_schema_and_flat_buffer_schema(schema: SDLSchema) -> String {
-    let schema = schema.unwrap_in_memory_impl();
     let bytes = serialize_as_flatbuffer(&schema);
     let fb_schema = build_schema_from_flat_buffer(&bytes).unwrap();
     let mut objects = Vec::new();

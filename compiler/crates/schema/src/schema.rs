@@ -269,8 +269,10 @@ impl SDLSchema {
         schema_documents: &[SchemaDocument],
         client_schema_documents: &[SchemaDocument],
     ) -> DiagnosticsResult<Self> {
-        let sdl_schema =
-            crate::in_memory::InMemorySchema::build(schema_documents, client_schema_documents)?;
+        let sdl_schema = SDLSchema::InMemory(crate::in_memory::InMemorySchema::build(
+            schema_documents,
+            client_schema_documents,
+        )?);
         let flatbuffer_bytes = crate::flatbuffer::serialize_as_flatbuffer(&sdl_schema);
         Ok(SDLSchema::FlatBuffer(SchemaWrapper::from_vec(
             flatbuffer_bytes,
