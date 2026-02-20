@@ -97,7 +97,6 @@ use crate::ast::ObjectEntry;
 use crate::ast::Primitive;
 use crate::ast::QueryID;
 use crate::ast::RequestParameters;
-use crate::ast::ResolverJSFunction;
 use crate::ast::ResolverModuleReference;
 use crate::constants::CODEGEN_CONSTANTS;
 use crate::object;
@@ -253,6 +252,7 @@ pub fn build_resolvers_schema(
             if let Some(Ok(ResolverInfo {
                 import_path,
                 import_name: Some(import_name),
+                resolver_type,
                 ..
             })) = get_resolver_info(schema, field, field.name.location)
             {
@@ -278,6 +278,7 @@ pub fn build_resolvers_schema(
                                 field.name.item,
                             )),
                         },
+                        resolver_type,
                     )),
                 });
             }
@@ -302,15 +303,23 @@ fn build_resolver_info(
     field: &Field,
     import_path: StringKey,
     import_name: ModuleImportName,
+    resolver_type: ResolverSchemaGenType,
 ) -> AstKey {
     ast_builder.intern(Ast::Object(object! {
-        resolver_function: Primitive::JSModuleDependency(JSModuleDependency {
-            path: project_config.js_module_import_identifier(
-                artifact_path,
-                &PathBuf::from(import_path.lookup()),
-            ),
-            import_name,
-        }),
+        resolver_function: match resolver_type {
+            ResolverSchemaGenType::PropertyLookup { property_name } => {
+                Primitive::PropertyAccessor(property_name.to_string())
+            }
+            ResolverSchemaGenType::ResolverModule => {
+                Primitive::JSModuleDependency(JSModuleDependency {
+                    path: project_config.js_module_import_identifier(
+                        artifact_path,
+                        &PathBuf::from(import_path.lookup()),
+                    ),
+                    import_name,
+                })
+            }
+        },
         root_fragment: match get_resolver_fragment_dependency_name(field) {
             Some(name) => {
                 let definition_name = WithLocation::new(
@@ -1012,6 +1021,7 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
                 },
                 None => ModuleImportName::Default(variable_name),
             },
+            resolver_metadata.resolver_type,
         );
         let mut obj = object! {
             name: Primitive::String(field_name),
@@ -1665,10 +1675,10 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
 
             let resolver_fn = match relay_resolver_metadata.resolver_type {
                 ResolverSchemaGenType::ResolverModule => {
-                    ResolverJSFunction::Module(resolver_js_module)
+                    Box::new(Primitive::JSModuleDependency(resolver_js_module))
                 }
                 ResolverSchemaGenType::PropertyLookup { property_name } => {
-                    ResolverJSFunction::PropertyLookup(property_name.to_string())
+                    Box::new(Primitive::PropertyAccessor(property_name.to_string()))
                 }
             };
 

@@ -37,7 +37,6 @@ use crate::ast::ObjectEntry;
 use crate::ast::Primitive;
 use crate::ast::QueryID;
 use crate::ast::RequestParameters;
-use crate::ast::ResolverJSFunction;
 use crate::ast::ResolverModuleReference;
 use crate::build_ast::build_fragment;
 use crate::build_ast::build_operation;
@@ -603,6 +602,9 @@ impl<'b> JSONPrinter<'b> {
                     Ok(())
                 }
             },
+            Primitive::PropertyAccessor(property) => {
+                write_arrow_fn(f, &["o"], &format!("o.{property}"))
+            }
             Primitive::RelayResolverModel {
                 graphql_module_path,
                 graphql_module_name,
@@ -678,7 +680,7 @@ impl<'b> JSONPrinter<'b> {
         f: &mut String,
         graphql_module_name: StringKey,
         graphql_module_path: StringKey,
-        resolver_fn: &ResolverJSFunction,
+        resolver_fn: &Primitive,
         injected_field_name_details: Option<(StringKey, bool)>,
     ) -> FmtResult {
         let relay_runtime_experimental = "relay-runtime/experimental";
@@ -702,16 +704,7 @@ impl<'b> JSONPrinter<'b> {
             )),
         )?;
         write!(f, ", ")?;
-        match resolver_fn {
-            ResolverJSFunction::Module(js_module) => self.write_js_dependency(
-                f,
-                js_module.import_name.clone(),
-                self.get_module_path(js_module.path, ModuleOrigin::SourceFile),
-            )?,
-            ResolverJSFunction::PropertyLookup(property) => {
-                write_arrow_fn(f, &["o"], &format!("o.{property}"))?
-            }
-        }
+        self.print_primitive(f, resolver_fn, 0, false)?;
         if let Some((field_name, is_required_field)) = injected_field_name_details {
             write!(f, ", '{field_name}'")?;
             write!(f, ", {is_required_field}")?;
@@ -914,6 +907,7 @@ fn write_constant_value(f: &mut String, builder: &AstBuilder, value: &Primitive)
         Primitive::GraphQLModuleDependency(_) => panic!("Unexpected GraphQLModuleDependency"),
         Primitive::JSModuleDependency { .. } => panic!("Unexpected JSModuleDependency"),
         Primitive::ResolverModuleReference { .. } => panic!("Unexpected ResolverModuleReference"),
+        Primitive::PropertyAccessor(_) => panic!("Unexpected PropertyAccessor"),
         Primitive::DynamicImport { .. } => panic!("Unexpected DynamicImport"),
         Primitive::RelayResolverModel { .. } => panic!("Unexpected RelayResolver"),
     }

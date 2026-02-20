@@ -98,12 +98,6 @@ pub enum GraphQLModuleDependency {
 }
 
 #[derive(Eq, PartialEq, Hash, Debug)]
-pub enum ResolverJSFunction {
-    Module(JSModuleDependency),
-    PropertyLookup(String),
-}
-
-#[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Primitive {
     Key(AstKey),
     Variable(StringKey),
@@ -125,10 +119,13 @@ pub enum Primitive {
         provider: ModuleProvider,
         module: StringKey,
     },
+    /// An accessor function for a property on the model object.
+    /// Printed as `(o) => o.{property_name}`.
+    PropertyAccessor(String),
     RelayResolverModel {
         graphql_module_name: StringKey,
         graphql_module_path: StringKey,
-        resolver_fn: ResolverJSFunction,
+        resolver_fn: Box<Primitive>,
         injected_field_name_details: Option<(StringKey, bool)>,
     },
 }
