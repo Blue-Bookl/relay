@@ -140,6 +140,30 @@ impl ProjectFixture {
         output
     }
 
+    /// Serialize only the file changes and deletions as a fixture string.
+    /// Omits the initial files. Useful for showing just what changed.
+    pub fn serialize_changes(&self) -> String {
+        let mut sorted_changes: Vec<_> = self.file_changes.iter().collect();
+        sorted_changes.sort_by(|x, y| x.0.cmp(y.0));
+
+        let mut output: String = Default::default();
+
+        for (file_name, change) in sorted_changes {
+            match change {
+                FileChange::Change(content) => {
+                    output.push_str(&format!("//-++ {}\n", format_normalized_path(file_name)));
+                    output.push_str(content);
+                    output.push('\n');
+                }
+                FileChange::Delete => {
+                    output.push_str(&format!("//-xx {}\n", format_normalized_path(file_name)));
+                }
+            }
+        }
+
+        output
+    }
+
     /// Write the files contained in this ProjectFixture to a directory.
     /// Useful for writing a fixture file to a temp directory before running an
     /// integration test.
@@ -219,6 +243,36 @@ impl ProjectFixture {
     /// Return file changes map
     pub fn file_changes(&self) -> &FnvHashMap<PathBuf, FileChange> {
         &self.file_changes
+    }
+
+    /// Create a new ProjectFixture with file_changes derived from the current
+    /// state of a directory. Compares the directory contents against `self.files`
+    /// to determine what changed: new or modified files become
+    /// `FileChange::Change`, and files in `self.files` that no longer exist on
+    /// disk become `FileChange::Delete`.
+    pub fn with_changes_from_dir(&self, dir: &Path) -> Self {
+        let current = Self::read_from_dir(dir);
+        let mut file_changes: FnvHashMap<PathBuf, FileChange> = Default::default();
+
+        // Detect new or modified files
+        for (path, content) in &current.files {
+            if self.files.get(path) != Some(content) {
+                file_changes.insert(path.clone(), FileChange::Change(content.clone()));
+            }
+        }
+
+        // Detect deleted files (skip paths outside the directory since
+        // read_from_dir can't observe them)
+        for path in self.files.keys() {
+            if !path.starts_with("..") && !current.files.contains_key(path) {
+                file_changes.insert(path.clone(), FileChange::Delete);
+            }
+        }
+
+        Self {
+            files: self.files.clone(),
+            file_changes,
+        }
     }
 
     /// Create a new ProjectFixture with file_changes merged into files.
