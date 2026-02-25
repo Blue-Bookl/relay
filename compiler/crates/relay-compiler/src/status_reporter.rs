@@ -119,7 +119,7 @@ impl ConsoleStatusReporter {
                 }
             }
             Error::Cancelled => {
-                info!("Compilation cancelled due to new changes.");
+                info!("Compilation cancelled.");
             }
             error => {
                 error!("{error}");

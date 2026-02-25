@@ -121,7 +121,8 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
             )?;
 
             if had_new_changes {
-                self.build_projects(compiler_state, &setup_event).await
+                let diagnostics = self.build_projects(compiler_state, &setup_event).await?;
+                Ok(diagnostics)
             } else {
                 Ok(vec![])
             }
@@ -485,26 +486,20 @@ async fn build_projects<TPerfLogger: PerfLogger + 'static>(
         let source_control_update_status = Arc::clone(&compiler_state.source_control_update_status);
         handles.push(task::spawn(async move {
             let project_config = &config.projects[&project_name];
-            Ok((
-                (
-                    project_name,
-                    commit_project(
-                        &config,
-                        project_config,
-                        perf_logger,
-                        &schema,
-                        programs,
-                        artifacts,
-                        artifact_map,
-                        removed_artifact_sources,
-                        dirty_artifact_paths,
-                        source_control_update_status,
-                    )
-                    .await?,
-                    schema,
-                ),
-                diagnostics,
-            ))
+            let artifact_map = commit_project(
+                &config,
+                project_config,
+                perf_logger,
+                &schema,
+                programs,
+                artifacts,
+                artifact_map,
+                removed_artifact_sources,
+                dirty_artifact_paths,
+                source_control_update_status,
+            )
+            .await?;
+            Ok(((project_name, artifact_map, schema), diagnostics))
         }));
     }
     setup_event.stop(build_commit_state_timer);

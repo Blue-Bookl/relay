@@ -781,7 +781,7 @@ The compiler may produce outdated artifacts, but it will regenerate the correct 
         project_config.name,
         programs.reader.document_count(),
         programs.normalization.document_count(),
-        programs.operation_text.document_count()
+        programs.operation_text.document_count(),
     );
     log_event.stop(commit_time);
     log_event.complete();
