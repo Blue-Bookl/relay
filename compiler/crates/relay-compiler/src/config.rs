@@ -136,6 +136,7 @@ pub struct Config {
     /// directories).
     pub generated_sources: FnvIndexMap<PathBuf, ProjectSet>,
     pub projects: FnvIndexMap<ProjectName, ProjectConfig>,
+    pub is_multi_project: bool,
     pub header: Vec<String>,
     pub codegen_command: Option<String>,
     /// If set, tries to initialize the compiler from the saved state file.
@@ -531,6 +532,7 @@ impl Config {
             excludes: config_file.excludes,
             generated_sources: config_file.generated_sources,
             projects,
+            is_multi_project,
             header: config_file.header,
             codegen_command: config_file.codegen_command,
             load_saved_state_file: None,

@@ -36,6 +36,15 @@ pub trait StatusReporter {
     fn build_errors(&self, error: &Error);
 }
 
+/// A no-op reporter used as a placeholder when the real reporter is being moved.
+pub struct NoopStatusReporter;
+
+impl StatusReporter for NoopStatusReporter {
+    fn build_starts(&self) {}
+    fn build_completes(&self, _diagnostics: &[Diagnostic]) {}
+    fn build_errors(&self, _error: &Error) {}
+}
+
 /// Tracks build status to coordinate between the compiler daemon and clients.
 ///
 /// This allows the client calling flush_to_disk to wait until
@@ -91,6 +100,103 @@ impl Default for BuildStatus {
     }
 }
 
+/// Format a single diagnostic for display with source context.
+pub fn format_diagnostic(
+    root_dir: &std::path::Path,
+    source_reader: &dyn SourceReader,
+    diagnostic: &Diagnostic,
+) -> String {
+    let printer = DiagnosticPrinter::new(|source_location| {
+        source_for_location(root_dir, source_location, source_reader)
+            .map(|source| source.to_text_source())
+    });
+    printer.diagnostic_to_string(diagnostic)
+}
+
+/// Format a build error into displayable messages with severity.
+pub fn format_build_errors(
+    root_dir: &std::path::Path,
+    source_reader: &dyn SourceReader,
+    is_multi_project: bool,
+    error: &Error,
+) -> Vec<(DiagnosticSeverity, String)> {
+    let mut messages = match error {
+        Error::DiagnosticsError { errors } => errors
+            .iter()
+            .map(|d| (d.severity(), format_diagnostic(root_dir, source_reader, d)))
+            .collect(),
+        Error::BuildProjectsErrors { errors } => errors
+            .iter()
+            .flat_map(|e| format_project_error(root_dir, source_reader, is_multi_project, e))
+            .collect(),
+        Error::Cancelled => {
+            vec![(
+                DiagnosticSeverity::INFORMATION,
+                "Compilation cancelled due to new changes.".to_string(),
+            )]
+        }
+        error => vec![(DiagnosticSeverity::ERROR, format!("{error}"))],
+    };
+    if !matches!(error, Error::Cancelled) {
+        messages.push((DiagnosticSeverity::ERROR, "Compilation failed.".to_string()));
+    }
+    messages
+}
+
+fn format_project_error(
+    root_dir: &std::path::Path,
+    source_reader: &dyn SourceReader,
+    is_multi_project: bool,
+    error: &BuildProjectError,
+) -> Vec<(DiagnosticSeverity, String)> {
+    match error {
+        BuildProjectError::ValidationErrors {
+            errors,
+            project_name,
+        } => errors
+            .iter()
+            .map(|diagnostic| {
+                let output = format_diagnostic(root_dir, source_reader, diagnostic);
+                let formatted_output = match diagnostic.severity() {
+                    DiagnosticSeverity::ERROR => {
+                        if is_multi_project {
+                            format!("Error in the project `{project_name}`: {output}")
+                        } else {
+                            format!("Error: {output}")
+                        }
+                    }
+                    _ => {
+                        if is_multi_project {
+                            format!("In the project `{project_name}`: {output}")
+                        } else {
+                            output
+                        }
+                    }
+                };
+
+                (diagnostic.severity(), formatted_output)
+            })
+            .collect(),
+        BuildProjectError::PersistErrors {
+            errors,
+            project_name,
+        } => errors
+            .iter()
+            .map(|error| {
+                let msg = if is_multi_project {
+                    format!("Error in the project `{project_name}`: {error}")
+                } else {
+                    format!("Error: {error}")
+                };
+                (DiagnosticSeverity::ERROR, msg)
+            })
+            .collect(),
+        _ => {
+            vec![(DiagnosticSeverity::ERROR, format!("{error}"))]
+        }
+    }
+}
+
 pub struct ConsoleStatusReporter {
     source_reader: Box<dyn SourceReader + Send + Sync>,
     root_dir: PathBuf,
@@ -105,34 +211,6 @@ impl ConsoleStatusReporter {
             is_multi_project,
         }
     }
-}
-
-impl ConsoleStatusReporter {
-    fn print_error(&self, error: &Error) {
-        match error {
-            Error::DiagnosticsError { errors } => {
-                self.print_diagnostics_by_severity(errors);
-            }
-            Error::BuildProjectsErrors { errors } => {
-                for error in errors {
-                    self.print_project_error(error);
-                }
-            }
-            Error::Cancelled => {
-                info!("Compilation cancelled.");
-            }
-            error => {
-                error!("{error}");
-            }
-        }
-    }
-
-    fn print_diagnostics_by_severity(&self, diagnostics: &[Diagnostic]) {
-        diagnostics
-            .iter()
-            .map(|diagnostic| (diagnostic.severity(), self.print_diagnostic(diagnostic)))
-            .for_each(|(severity, output)| self.print_by_severity(severity, output));
-    }
 
     fn print_by_severity(&self, severity: DiagnosticSeverity, output: String) {
         match severity {
@@ -144,78 +222,28 @@ impl ConsoleStatusReporter {
             _ => info!("{output}"),
         }
     }
-
-    fn print_project_error(&self, error: &BuildProjectError) {
-        match error {
-            BuildProjectError::ValidationErrors {
-                errors,
-                project_name,
-            } => {
-                errors
-                    .iter()
-                    .map(|diagnostic| {
-                        let output = self.print_diagnostic(diagnostic);
-                        let formatted_output = match diagnostic.severity() {
-                            DiagnosticSeverity::ERROR => {
-                                if self.is_multi_project {
-                                    format!("Error in the project `{project_name}`: {output}")
-                                } else {
-                                    format!("Error: {output}")
-                                }
-                            }
-                            _ => {
-                                if self.is_multi_project {
-                                    format!("In the project `{project_name}`: {output}")
-                                } else {
-                                    output
-                                }
-                            }
-                        };
-
-                        (diagnostic.severity(), formatted_output)
-                    })
-                    .for_each(|(severity, output)| self.print_by_severity(severity, output));
-            }
-            BuildProjectError::PersistErrors {
-                errors,
-                project_name,
-            } => {
-                for error in errors {
-                    if self.is_multi_project {
-                        error!("Error in the project `{project_name}`: {error}");
-                    } else {
-                        error!("Error: {error}");
-                    }
-                }
-            }
-            _ => {
-                error!("{error}");
-            }
-        }
-    }
-
-    fn print_diagnostic(&self, diagnostic: &Diagnostic) -> String {
-        let printer = DiagnosticPrinter::new(|source_location| {
-            source_for_location(&self.root_dir, source_location, self.source_reader.as_ref())
-                .map(|source| source.to_text_source())
-        });
-        printer.diagnostic_to_string(diagnostic)
-    }
 }
 
 impl StatusReporter for ConsoleStatusReporter {
     fn build_starts(&self) {}
 
     fn build_completes(&self, diagnostics: &[Diagnostic]) {
-        self.print_diagnostics_by_severity(diagnostics);
+        for diagnostic in diagnostics {
+            let output = format_diagnostic(&self.root_dir, self.source_reader.as_ref(), diagnostic);
+            self.print_by_severity(diagnostic.severity(), output);
+        }
         info!("Compilation completed.");
     }
 
     fn build_errors(&self, error: &Error) {
-        self.print_error(error);
-
-        if !matches!(error, Error::Cancelled) {
-            error!("Compilation failed.");
+        let messages = format_build_errors(
+            &self.root_dir,
+            self.source_reader.as_ref(),
+            self.is_multi_project,
+            error,
+        );
+        for (severity, msg) in messages {
+            self.print_by_severity(severity, msg);
         }
     }
 }
