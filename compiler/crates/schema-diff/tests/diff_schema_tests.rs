@@ -862,6 +862,8 @@ fn test_object_special_field_added() {
     );
 }
 
+// Adding a type with id + non-Node interface needs an incremental rebuild
+// because queries spreading on that interface may need updated inline spreads.
 #[test]
 fn test_add_type_with_id_actor_interface() {
     assert_eq!(
@@ -887,7 +889,52 @@ fn test_add_type_with_id_actor_interface() {
             }
             #"
         ),
-        SchemaChangeSafety::Unsafe
+        SchemaChangeSafety::SafeWithIncrementalBuild(FxHashSet::from_iter([
+            IncrementalBuildSchemaChange::Object("B".intern()),
+            IncrementalBuildSchemaChange::Interface("Actor".intern()),
+        ]))
+    )
+}
+
+// Adding a type with id + Node + non-Node interface skips Node in the
+// incremental set because generate_id_field handles Node uniformly.
+#[test]
+fn test_add_type_with_id_node_and_actor_interface() {
+    assert_eq!(
+        get_safety(
+            r"
+            type A {
+                key: String
+            }
+            type B implements Node & Actor {
+                id: ID
+                name: String
+            }
+            interface Node {
+                id: ID
+            }
+            interface Actor {
+                name: String
+            }
+            #",
+            r"
+            type A {
+                key: String
+            }
+            interface Node {
+                id: ID
+            }
+            interface Actor {
+                name: String
+            }
+            #"
+        ),
+        SchemaChangeSafety::SafeWithIncrementalBuild(FxHashSet::from_iter([
+            IncrementalBuildSchemaChange::Object("B".intern()),
+            // Only Actor — Node is skipped because generate_id_field
+            // handles it uniformly via `... on Node { id }`.
+            IncrementalBuildSchemaChange::Interface("Actor".intern()),
+        ]))
     )
 }
 

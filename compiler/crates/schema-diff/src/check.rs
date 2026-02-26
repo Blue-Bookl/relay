@@ -128,7 +128,31 @@ impl SchemaChange {
                         }
                         DefinitionChange::ObjectAdded(name) => {
                             if !is_object_add_safe(name, schema, schema_config) {
-                                return SchemaChangeSafety::Unsafe;
+                                // The new type has an id field and implements
+                                // non-Node interfaces. Queries spreading on
+                                // those interfaces may need updated inline
+                                // spreads. Mark the object and its interfaces
+                                // for incremental rebuild.
+                                needs_incremental_build
+                                    .insert(IncrementalBuildSchemaChange::Object(name));
+                                if let Some(schema::Type::Object(id)) = schema.get_type(name) {
+                                    let object = schema.object(id);
+                                    for iface_id in &object.interfaces {
+                                        let iface = schema.interface(*iface_id);
+                                        // Skip Node: generate_id_field handles all Node
+                                        // implementors via a single `... on Node { id }`
+                                        // fragment, so adding a new Node implementor
+                                        // never changes Node-only operations' output.
+                                        if iface.name.item == *NODE_INTERFACE_KEY {
+                                            continue;
+                                        }
+                                        needs_incremental_build.insert(
+                                            IncrementalBuildSchemaChange::Interface(
+                                                iface.name.item.0,
+                                            ),
+                                        );
+                                    }
+                                }
                             }
                         }
                         // safe changes
