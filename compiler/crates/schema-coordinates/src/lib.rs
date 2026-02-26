@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::Greater;
 use std::cmp::Ordering::Less;
 use std::fmt::Display;
+use std::str::FromStr;
 
 use intern::string_key::Intern;
 use intern::string_key::StringKey;
@@ -270,6 +271,14 @@ impl Display for SchemaCoordinate {
                 argument_name,
             } => write!(f, "@{}({}:)", directive_name, argument_name),
         }
+    }
+}
+
+impl FromStr for SchemaCoordinate {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_schema_coordinate_best_effort(s)
     }
 }
 
