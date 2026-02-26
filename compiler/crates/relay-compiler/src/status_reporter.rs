@@ -7,12 +7,16 @@
 
 //! The status reporter module provides functionality for reporting the status of the Relay compiler.
 //!
-//! This module contains two implementations of the `StatusReporter` trait:
+//! This module contains the following implementations of the `StatusReporter` trait:
 //! * `ConsoleStatusReporter`: Reports the status to the console using the `log` crate.
 //! * `JSONStatusReporter`: Reports the status to a JSON file using the `serde_json` crate.
+//! * `BuildStatus`: Wraps a base reporter (decorator pattern), delegating reporting while
+//!   also tracking build state for daemon/client synchronization.
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 
@@ -45,10 +49,24 @@ impl StatusReporter for NoopStatusReporter {
     fn build_errors(&self, _error: &Error) {}
 }
 
+/// The result of the most recent build, either successful stats or error messages.
+#[derive(Debug, Clone)]
+pub enum BuildResult {
+    /// Successful build with per-project diagnostics (severity and pre-formatted message).
+    Success(Vec<(DiagnosticSeverity, String)>),
+    /// Failed build with pre-formatted error messages and their severities.
+    Errors(Vec<(DiagnosticSeverity, String)>),
+}
+
 /// Tracks build status to coordinate between the compiler daemon and clients.
 ///
 /// This allows the client calling flush_to_disk to wait until
 /// any ongoing build completes, ensuring artifacts are consistent.
+///
+/// `BuildStatus` also implements `StatusReporter` using the decorator pattern:
+/// it wraps a base reporter (e.g. `ConsoleStatusReporter`) and delegates
+/// reporting to it, while additionally storing `BuildResult` and managing
+/// the `is_building` synchronization flag.
 ///
 /// The `is_building` flag starts as `true` to ensure the initial build is
 /// waited for. It is cleared when the build completes or when no build is
@@ -56,30 +74,36 @@ impl StatusReporter for NoopStatusReporter {
 pub struct BuildStatus {
     is_building: AtomicBool,
     build_complete_notify: Notify,
+    build_result: Mutex<Option<BuildResult>>,
+    /// The base reporter to delegate display/logging to.
+    base_reporter: Box<dyn StatusReporter + Send + Sync>,
+    root_dir: PathBuf,
+    is_multi_project: bool,
 }
 
 impl BuildStatus {
-    pub fn new() -> Self {
+    /// Create a new `BuildStatus` that wraps the given base reporter.
+    ///
+    /// The `root_dir` and `is_multi_project` parameters are used to format
+    /// diagnostics into the stored `BuildResult`.
+    pub fn new(
+        base_reporter: Box<dyn StatusReporter + Send + Sync>,
+        root_dir: PathBuf,
+        is_multi_project: bool,
+    ) -> Self {
         Self {
             // Start with is_building=true to wait for the initial build
             is_building: AtomicBool::new(true),
             build_complete_notify: Notify::new(),
+            build_result: Mutex::new(None),
+            base_reporter,
+            root_dir,
+            is_multi_project,
         }
-    }
-
-    /// Called when file changes are detected, before the build starts.
-    pub fn changes_pending(&self) {
-        self.is_building.store(true, SeqCst);
     }
 
     /// Called when pending changes were determined to not require a build.
     pub fn no_pending_changes(&self) {
-        self.is_building.store(false, SeqCst);
-        self.build_complete_notify.notify_waiters();
-    }
-
-    /// Called when a build completes (successfully or with errors)
-    pub fn build_completed(&self) {
         self.is_building.store(false, SeqCst);
         self.build_complete_notify.notify_waiters();
     }
@@ -92,11 +116,80 @@ impl BuildStatus {
             notified.await;
         }
     }
+
+    /// Get the build result. Success results are taken (cleared on read),
+    /// while error results persist until replaced by a successful build.
+    pub fn take_build_result(&self) -> Option<BuildResult> {
+        let mut guard = self.build_result.lock().unwrap();
+        match &*guard {
+            Some(BuildResult::Success(_)) => guard.take(),
+            other => other.clone(),
+        }
+    }
+
+    fn set_build_result(&self, result: BuildResult) {
+        *self.build_result.lock().unwrap() = Some(result);
+    }
+
+    /// Called when file changes are detected, before the build starts.
+    /// This must be called early (before debouncing/checks) to ensure clients
+    /// calling `wait_for_idle()` are blocked during the entire processing period.
+    pub fn changes_pending(&self) {
+        self.is_building.store(true, SeqCst);
+    }
+
+    fn build_completed(&self) {
+        self.is_building.store(false, SeqCst);
+        self.build_complete_notify.notify_waiters();
+    }
 }
 
-impl Default for BuildStatus {
-    fn default() -> Self {
-        Self::new()
+impl StatusReporter for BuildStatus {
+    fn build_starts(&self) {
+        self.base_reporter.build_starts();
+    }
+
+    fn build_completes(&self, diagnostics: &[Diagnostic]) {
+        self.base_reporter.build_completes(diagnostics);
+        self.set_build_result(BuildResult::Success(
+            diagnostics
+                .iter()
+                .filter(|d| d.severity() != DiagnosticSeverity::HINT)
+                .map(|d| {
+                    (
+                        d.severity(),
+                        format_diagnostic(&self.root_dir, &FsSourceReader, d),
+                    )
+                })
+                .collect(),
+        ));
+        self.build_completed();
+    }
+
+    fn build_errors(&self, error: &Error) {
+        self.base_reporter.build_errors(error);
+        let messages = format_build_errors(
+            &self.root_dir,
+            &FsSourceReader,
+            self.is_multi_project,
+            error,
+        );
+        self.set_build_result(BuildResult::Errors(messages));
+        self.build_completed();
+    }
+}
+
+impl StatusReporter for Arc<BuildStatus> {
+    fn build_starts(&self) {
+        (**self).build_starts();
+    }
+
+    fn build_completes(&self, diagnostics: &[Diagnostic]) {
+        (**self).build_completes(diagnostics);
+    }
+
+    fn build_errors(&self, error: &Error) {
+        (**self).build_errors(error);
     }
 }
 

@@ -150,10 +150,10 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
             let initial_watch_compile_timer = setup_event.start("initial_watch_compile");
             self.config.status_reporter.build_starts();
 
-            // Signal that the initial build is starting
             if let Some(build_status) = &self.config.build_status {
                 build_status.changes_pending();
             }
+
             let result: Result<(CompilerState, Arc<Notify>, JoinHandle<()>)> = async {
                 if let Some(initialize_resources) = &self.config.initialize_resources {
                     let timer = setup_event.start("load_resources");
@@ -230,16 +230,10 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                     match self.build_projects(&mut compiler_state, &setup_event).await {
                         Ok(diagnostics) => {
                             self.config.status_reporter.build_completes(&diagnostics);
-                            if let Some(build_status) = &self.config.build_status {
-                                build_status.build_completed();
-                            }
                         }
                         Err(err) => {
                             red_to_green.log_error();
                             self.config.status_reporter.build_errors(&err);
-                            if let Some(build_status) = &self.config.build_status {
-                                build_status.build_completed();
-                            }
                         }
                     };
                     setup_event.stop(initial_watch_compile_timer);
@@ -255,10 +249,6 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                 }
                 Err(err) => {
                     self.config.status_reporter.build_errors(&err);
-                    // Signal that the initial setup failed
-                    if let Some(build_status) = &self.config.build_status {
-                        build_status.build_completed();
-                    }
                     break 'watch Err(err);
                 }
             }
@@ -276,7 +266,9 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
         loop {
             notify_receiver.notified().await;
 
-            // Signal that changes have been detected and a build may occur
+            // Signal that changes have been detected and processing may occur.
+            // This must happen before any checks/debouncing so that clients
+            // calling wait_for_idle() are blocked during the entire period.
             if let Some(build_status) = &self.config.build_status {
                 build_status.changes_pending();
             }
@@ -328,17 +320,11 @@ impl<TPerfLogger: PerfLogger> Compiler<TPerfLogger> {
                     {
                         Ok(diagnostics) => {
                             self.config.status_reporter.build_completes(&diagnostics);
-                            if let Some(build_status) = &self.config.build_status {
-                                build_status.build_completed();
-                            }
                             red_to_green.clear_error_and_log(self.perf_logger.as_ref());
                         }
                         Err(err) => {
                             red_to_green.log_error();
                             self.config.status_reporter.build_errors(&err);
-                            if let Some(build_status) = &self.config.build_status {
-                                build_status.build_completed();
-                            }
                         }
                     }
 
