@@ -1440,6 +1440,99 @@ fn test_interfaces_safe_with_incremental_build_changes() {
     );
 }
 
+// Adding fields to an input object requires an incremental rebuild
+// because Relay generates type definitions that include all fields.
+#[test]
+fn test_input_object_add_fields_is_safe_with_incremental_build() {
+    assert_eq!(
+        get_safety(
+            r"
+            input MyInput {
+                key: String
+                newField: Int
+            }
+            #",
+            r"
+            input MyInput {
+                key: String
+            }
+            #"
+        ),
+        SchemaChangeSafety::SafeWithIncrementalBuild(FxHashSet::from_iter([
+            IncrementalBuildSchemaChange::InputObject("MyInput".intern())
+        ]))
+    )
+}
+
+// Removing fields from an input object needs an incremental rebuild.
+#[test]
+fn test_input_object_remove_fields_is_safe_with_incremental_build() {
+    assert_eq!(
+        get_safety(
+            r"
+            input MyInput {
+                key: String
+            }
+            #",
+            r"
+            input MyInput {
+                key: String
+                oldField: Int
+            }
+            #"
+        ),
+        SchemaChangeSafety::SafeWithIncrementalBuild(FxHashSet::from_iter([
+            IncrementalBuildSchemaChange::InputObject("MyInput".intern())
+        ]))
+    )
+}
+
+// Mixed add+remove on an input object needs an incremental rebuild.
+#[test]
+fn test_input_object_add_and_remove_fields_is_safe_with_incremental_build() {
+    assert_eq!(
+        get_safety(
+            r"
+            input MyInput {
+                key: String
+                newField: Int
+            }
+            #",
+            r"
+            input MyInput {
+                key: String
+                oldField: Float
+            }
+            #"
+        ),
+        SchemaChangeSafety::SafeWithIncrementalBuild(FxHashSet::from_iter([
+            IncrementalBuildSchemaChange::InputObject("MyInput".intern())
+        ]))
+    )
+}
+
+// Changing a field's type appears as remove+add and needs an incremental rebuild.
+#[test]
+fn test_input_object_change_field_type_is_safe_with_incremental_build() {
+    assert_eq!(
+        get_safety(
+            r"
+            input MyInput {
+                key: String
+            }
+            #",
+            r"
+            input MyInput {
+                key: Int
+            }
+            #"
+        ),
+        SchemaChangeSafety::SafeWithIncrementalBuild(FxHashSet::from_iter([
+            IncrementalBuildSchemaChange::InputObject("MyInput".intern())
+        ]))
+    )
+}
+
 fn sort_change(change: &mut SchemaChange) {
     if let SchemaChange::DefinitionChanges(changes) = change {
         changes.sort();

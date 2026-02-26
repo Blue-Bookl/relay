@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<22f2e14c9ed3558161a846ec623f365c>>
+ * @generated SignedSource<<3cb68fc887f5eff63ef8241945ba8b97>>
  */
 
 mod relay_compiler_integration;
@@ -199,6 +199,13 @@ async fn incremental_file_deletion() {
     let input = include_str!("relay_compiler_integration/fixtures/incremental_file_deletion.input");
     let expected = include_str!("relay_compiler_integration/fixtures/incremental_file_deletion.expected");
     test_fixture(transform_fixture, file!(), "incremental_file_deletion.input", "relay_compiler_integration/fixtures/incremental_file_deletion.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn incremental_input_object_field_addition() {
+    let input = include_str!("relay_compiler_integration/fixtures/incremental_input_object_field_addition.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/incremental_input_object_field_addition.expected");
+    test_fixture(transform_fixture, file!(), "incremental_input_object_field_addition.input", "relay_compiler_integration/fixtures/incremental_input_object_field_addition.expected", input, expected).await;
 }
 
 #[tokio::test]

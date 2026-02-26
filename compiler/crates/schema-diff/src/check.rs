@@ -27,6 +27,7 @@ use crate::definitions::TypeChange;
 #[derive(Eq, PartialEq, Hash)]
 pub enum IncrementalBuildSchemaChange {
     Enum(StringKey),
+    InputObject(StringKey),
     Object(StringKey),
     Union(StringKey),
     Interface(StringKey),
@@ -36,6 +37,7 @@ impl fmt::Debug for IncrementalBuildSchemaChange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             IncrementalBuildSchemaChange::Enum(name) => write!(f, "enum({name})"),
+            IncrementalBuildSchemaChange::InputObject(name) => write!(f, "input_object({name})"),
             IncrementalBuildSchemaChange::Object(name) => write!(f, "object({name})"),
             IncrementalBuildSchemaChange::Union(name) => write!(f, "union({name})"),
             IncrementalBuildSchemaChange::Interface(name) => write!(f, "interface({name})"),
@@ -148,9 +150,20 @@ impl SchemaChange {
                                 .insert(IncrementalBuildSchemaChange::Union(name));
                         }
 
+                        // Input object changes need an incremental rebuild because
+                        // generated type definitions include all fields of the
+                        // input object.
+                        DefinitionChange::InputObjectChanged {
+                            name,
+                            added: _,
+                            removed: _,
+                        } => {
+                            needs_incremental_build
+                                .insert(IncrementalBuildSchemaChange::InputObject(name));
+                        }
+
                         // unsafe changes
                         DefinitionChange::ScalarRemoved(_)
-                        | DefinitionChange::InputObjectChanged { .. }
                         | DefinitionChange::InputObjectRemoved(_)
                         | DefinitionChange::InterfaceRemoved(_)
                         | DefinitionChange::ObjectRemoved(_) => return SchemaChangeSafety::Unsafe,

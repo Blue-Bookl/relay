@@ -168,6 +168,14 @@ impl SchemaChangeDefinitionFinder<'_, '_> {
                 // `changed_definitions` if needed.
                 if self.visited_input_objects.insert(id) {
                     let input_object = self.schema.input_object(id);
+                    let key = input_object.name.item.0;
+                    if self
+                        .schema_changes
+                        .contains(&IncrementalBuildSchemaChange::InputObject(key))
+                    {
+                        self.changed_definitions
+                            .insert(self.get_name_from_executable());
+                    }
                     for field in input_object.fields.iter() {
                         self.add_type_changes(field.type_.inner());
                     }
