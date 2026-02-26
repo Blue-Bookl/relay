@@ -22,6 +22,7 @@ graphql-ir = { path = "../graphql-ir" }
 graphql-syntax = { path = "../graphql-syntax" }
 intern = { path = "../intern" }
 lazy_static = "1.5"
+rayon = "1.11.0"
 relay-transforms = { path = "../relay-transforms" }
 rustc-hash = "2.1.1"
 schema = { path = "../schema" }
