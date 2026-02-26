@@ -649,15 +649,19 @@ pub async fn commit_project(
         }
     };
 
-    let artifacts_file_hash_map = match &config.get_artifacts_file_hash_map {
-        Some(get_fn) => {
-            let get_artifacts_file_hash_map_timer =
-                log_event.start("get_artifacts_file_hash_map_time");
-            let res = get_fn(&artifacts).await;
-            log_event.stop(get_artifacts_file_hash_map_timer);
-            res
+    let artifacts_file_hash_map = if artifacts.is_empty() {
+        None
+    } else {
+        match &config.get_artifacts_file_hash_map {
+            Some(get_fn) => {
+                let get_artifacts_file_hash_map_timer =
+                    log_event.start("get_artifacts_file_hash_map_time");
+                let res = get_fn(&artifacts).await;
+                log_event.stop(get_artifacts_file_hash_map_timer);
+                res
+            }
+            _ => None,
         }
-        _ => None,
     };
 
     // Write the generated artifacts to disk. This step is separate from
