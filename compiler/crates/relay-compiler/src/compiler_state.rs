@@ -553,37 +553,31 @@ impl CompilerState {
         detect_changes(&current, &previous)
     }
 
-    fn get_schema_change_safety(
-        &self,
+    fn build_schema_for_safety_check(
         sources: &SchemaSources,
-        schema_change: SchemaChange,
-        schema_config: &SchemaConfig,
-    ) -> SchemaChangeSafety {
-        if schema_change == SchemaChange::None {
-            SchemaChangeSafety::Safe
-        } else {
-            let current_sources_with_location = sources
-                .get_sources_with_location()
-                .into_iter()
-                .map(|(schema, location_key)| (schema.as_str(), location_key))
-                .collect::<Vec<_>>();
+    ) -> std::result::Result<SDLSchema, ()> {
+        let current_sources_with_location = sources
+            .get_sources_with_location()
+            .into_iter()
+            .map(|(schema, location_key)| (schema.as_str(), location_key))
+            .collect::<Vec<_>>();
 
-            match relay_schema::build_schema_with_extensions(
-                &current_sources_with_location,
-                &Vec::<(&str, SourceLocationKey)>::new(),
-            ) {
-                Ok(schema) => schema_change.get_safety(&schema, schema_config),
-                Err(_) => SchemaChangeSafety::Unsafe,
-            }
-        }
+        relay_schema::build_schema_with_extensions(
+            &current_sources_with_location,
+            &Vec::<(&str, SourceLocationKey)>::new(),
+        )
+        .map_err(|_| ())
     }
 
     /// This method is looking at the pending schema changes to see if they may be breaking (removed types, renamed field, etc)
+    /// When `built_schema` is provided, it is reused for the safety check
+    /// instead of rebuilding the schema.
     pub fn schema_change_safety(
         &self,
         log_event: &impl PerfLogEvent,
         project_name: ProjectName,
         schema_config: &SchemaConfig,
+        built_schema: Option<&SDLSchema>,
     ) -> SchemaChangeSafety {
         if let Some(extension) = self.extensions.get(&project_name)
             && !extension.pending.is_empty()
@@ -603,13 +597,21 @@ impl CompilerState {
             log_event.string("has_breaking_schema_change", "full_source".to_owned());
             return SchemaChangeSafety::Unsafe;
         }
-        if let Some(schema) = self.schemas.get(&project_name)
-            && !schema.pending.is_empty()
+        if let Some(schema_sources) = self.schemas.get(&project_name)
+            && !schema_sources.pending.is_empty()
         {
-            let schema_change = self.get_schema_change(schema);
+            let schema_change = self.get_schema_change(schema_sources);
             let schema_change_string = schema_change.to_string();
-            let schema_change_safety =
-                self.get_schema_change_safety(schema, schema_change, schema_config);
+            let schema_change_safety = if schema_change == SchemaChange::None {
+                SchemaChangeSafety::Safe
+            } else if let Some(schema) = built_schema {
+                schema_change.get_safety(schema, schema_config)
+            } else {
+                match Self::build_schema_for_safety_check(schema_sources) {
+                    Ok(schema) => schema_change.get_safety(&schema, schema_config),
+                    Err(_) => SchemaChangeSafety::Unsafe,
+                }
+            };
             match schema_change_safety {
                 SchemaChangeSafety::Unsafe => {
                     log_event.string("schema_change", schema_change_string);

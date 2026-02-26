@@ -317,6 +317,7 @@ pub fn build_programs(
             log_event,
             project_name,
             &project_config.schema_config,
+            Some(&schema),
         );
         match project_schema_change {
             SchemaChangeSafety::Unsafe => BuildMode::Full,
@@ -336,6 +337,7 @@ pub fn build_programs(
                             log_event,
                             base,
                             &project_config.schema_config,
+                            None,
                         )
                     }
                 } else {
