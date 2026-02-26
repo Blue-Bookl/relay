@@ -322,11 +322,22 @@ pub fn build_programs(
             SchemaChangeSafety::Unsafe => BuildMode::Full,
             SchemaChangeSafety::Safe | SchemaChangeSafety::SafeWithIncrementalBuild(_) => {
                 let base_schema_change = if let Some(base) = project_config.base {
-                    compiler_state.schema_change_safety(
-                        log_event,
-                        base,
-                        &project_config.schema_config,
-                    )
+                    // When the base project shares the same pending schema
+                    // sources as this project, the expensive schema rebuild
+                    // and diff would produce an identical result — the
+                    // project's own check already captured these changes.
+                    // Skip it and only check extensions/docblocks/full_sources.
+                    if compiler_state.projects_share_pending_schemas(project_name, base)
+                        && !compiler_state.has_pending_non_schema_changes(base)
+                    {
+                        SchemaChangeSafety::Safe
+                    } else {
+                        compiler_state.schema_change_safety(
+                            log_event,
+                            base,
+                            &project_config.schema_config,
+                        )
+                    }
                 } else {
                     SchemaChangeSafety::Safe
                 };

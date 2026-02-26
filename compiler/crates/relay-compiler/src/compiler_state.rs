@@ -489,10 +489,22 @@ impl CompilerState {
         self.schemas
             .get(&project_name)
             .is_some_and(|sources| !sources.pending.is_empty())
-            || self
-                .extensions
-                .get(&project_name)
-                .is_some_and(|sources| !sources.pending.is_empty())
+            || self.has_pending_non_schema_changes(project_name)
+    }
+
+    /// Whether two projects have identical pending schema sources.
+    pub fn projects_share_pending_schemas(&self, a: ProjectName, b: ProjectName) -> bool {
+        self.schemas
+            .get(&a)
+            .zip(self.schemas.get(&b))
+            .is_some_and(|(a, b)| a.pending == b.pending)
+    }
+
+    /// Whether a project has pending extension, docblock, or full_source changes.
+    pub fn has_pending_non_schema_changes(&self, project_name: ProjectName) -> bool {
+        self.extensions
+            .get(&project_name)
+            .is_some_and(|sources| !sources.pending.is_empty())
             || self
                 .docblocks
                 .get(&project_name)
