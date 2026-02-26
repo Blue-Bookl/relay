@@ -545,10 +545,15 @@ pub fn detect_changes(current_text: &[&str], previous_text: &[&str]) -> SchemaCh
         return SchemaChange::None;
     }
 
-    match (
-        parse_schema_document(&current_text.join("\n"), SourceLocationKey::Generated),
-        parse_schema_document(&previous_text.join("\n"), SourceLocationKey::Generated),
-    ) {
+    let current_joined = current_text.join("\n");
+    let previous_joined = previous_text.join("\n");
+
+    let (current_result, previous_result) = rayon::join(
+        || parse_schema_document(&current_joined, SourceLocationKey::Generated),
+        || parse_schema_document(&previous_joined, SourceLocationKey::Generated),
+    );
+
+    match (current_result, previous_result) {
         (Ok(current_schema), Ok(previous_schema)) => {
             diff(current_schema.definitions, previous_schema.definitions)
         }
