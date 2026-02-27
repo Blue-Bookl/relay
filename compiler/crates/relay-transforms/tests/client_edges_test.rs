@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<b7e5853c7562e13d0e5708fb6b18f962>>
+ * @generated SignedSource<<247f1a63ba65bc6dc00ec0de0d46ee0e>>
  */
 
 mod client_edges;
@@ -153,17 +153,24 @@ async fn output_type() {
 }
 
 #[tokio::test]
-async fn server_edge_to_client_in_fragment_with_exec_time_resolvers_invalid() {
-    let input = include_str!("client_edges/fixtures/server-edge-to-client-in-fragment-with-exec-time-resolvers.invalid.graphql");
-    let expected = include_str!("client_edges/fixtures/server-edge-to-client-in-fragment-with-exec-time-resolvers.invalid.expected");
-    test_fixture(transform_fixture, file!(), "server-edge-to-client-in-fragment-with-exec-time-resolvers.invalid.graphql", "client_edges/fixtures/server-edge-to-client-in-fragment-with-exec-time-resolvers.invalid.expected", input, expected).await;
+async fn server_edge_to_client_in_fragment_with_exec_time_resolvers() {
+    let input = include_str!("client_edges/fixtures/server-edge-to-client-in-fragment-with-exec-time-resolvers.graphql");
+    let expected = include_str!("client_edges/fixtures/server-edge-to-client-in-fragment-with-exec-time-resolvers.expected");
+    test_fixture(transform_fixture, file!(), "server-edge-to-client-in-fragment-with-exec-time-resolvers.graphql", "client_edges/fixtures/server-edge-to-client-in-fragment-with-exec-time-resolvers.expected", input, expected).await;
 }
 
 #[tokio::test]
-async fn server_edge_to_client_with_exec_time_resolvers_invalid() {
-    let input = include_str!("client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers.invalid.graphql");
-    let expected = include_str!("client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers.invalid.expected");
-    test_fixture(transform_fixture, file!(), "server-edge-to-client-with-exec-time-resolvers.invalid.graphql", "client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers.invalid.expected", input, expected).await;
+async fn server_edge_to_client_with_exec_time_resolvers() {
+    let input = include_str!("client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers.graphql");
+    let expected = include_str!("client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers.expected");
+    test_fixture(transform_fixture, file!(), "server-edge-to-client-with-exec-time-resolvers.graphql", "client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn server_edge_to_client_with_exec_time_resolvers_invalid_root_fragment_invalid() {
+    let input = include_str!("client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers-invalid-root-fragment.invalid.graphql");
+    let expected = include_str!("client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers-invalid-root-fragment.invalid.expected");
+    test_fixture(transform_fixture, file!(), "server-edge-to-client-with-exec-time-resolvers-invalid-root-fragment.invalid.graphql", "client_edges/fixtures/server-edge-to-client-with-exec-time-resolvers-invalid-root-fragment.invalid.expected", input, expected).await;
 }
 
 #[tokio::test]

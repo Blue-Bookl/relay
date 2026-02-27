@@ -1,9 +1,13 @@
-#expected-to-throw
+# S2C edges on server types in fragments are allowed in exec time resolvers
 query TestQuery @exec_time_resolvers {
   me {
-    client_recommendation {
-      id
-    }
+    ...UserFragment
+  }
+}
+
+fragment UserFragment on User {
+  client_recommendation {
+    id
   }
 }
 

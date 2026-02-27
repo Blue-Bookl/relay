@@ -15,6 +15,7 @@ use common::Location;
 use common::NamedItem;
 use common::ObjectName;
 use common::WithLocation;
+use docblock_shared::FRAGMENT_KEY_ARGUMENT_NAME;
 use docblock_shared::HAS_OUTPUT_TYPE_ARGUMENT_NAME;
 use docblock_shared::RELAY_RESOLVER_DIRECTIVE_NAME;
 use docblock_shared::RELAY_RESOLVER_MODEL_INSTANCE_FIELD;
@@ -639,11 +640,8 @@ impl<'program, 'pc> ClientEdgesTransform<'program, 'pc> {
             .replace_or_else(|| field.selections.clone());
 
         let metadata_directive = if is_edge_to_client_object {
-            // Server-to-client edges are not compatible with exec time resolvers
-            // A server-to-client edge is when we extend an existing server type with a client field
-            if self.has_exec_time_resolvers {
-                self.validte_server_to_client_edges_for_exec_time(field);
-            }
+            // Validate S2C @rootFragment identity-only constraint
+            self.validate_s2c_root_fragment_for_exec_time(field);
             match self.get_edge_to_client_object_metadata_directive(
                 field,
                 edge_to_type,
@@ -815,33 +813,115 @@ impl Transformer<'_> for ClientEdgesTransform<'_, '_> {
                 directive.location,
             ));
         }
-        if self.has_exec_time_resolvers {
-            let field_type: &schema::Field = self.program.schema.field(field.definition().item);
-            let resolver_directive = field_type.directives.named(*RELAY_RESOLVER_DIRECTIVE_NAME);
-            let is_client_edge = field_type.is_extension && resolver_directive.is_some();
-            if is_client_edge {
-                self.validte_server_to_client_edges_for_exec_time(field)
-            }
-        }
-
+        // Validate S2C @rootFragment identity-only constraint
+        self.validate_s2c_root_fragment_for_exec_time(field);
         self.default_transform_scalar_field(field)
     }
 }
 
 impl ClientEdgesTransform<'_, '_> {
-    fn validte_server_to_client_edges_for_exec_time<T: graphql_ir::Field>(&mut self, field: &T) {
-        // Server-to-client fields are not compatible with exec time resolvers
-        // A server-to-client edge is when we extend an existing server type with a client field
+    /// Validate that an S2C resolver's @rootFragment only selects __typename and/or id
+    /// when used inside @exec_time_resolvers queries.
+    fn validate_s2c_root_fragment_for_exec_time<T: graphql_ir::Field>(&mut self, field: &T) {
+        if !self.has_exec_time_resolvers {
+            return;
+        }
         let field_type: &schema::Field = self.program.schema.field(field.definition().item);
+        // Only validate S2C fields: client extension fields on server types
         let is_server_field = field_type
             .parent_type
             .is_some_and(|parent_type| !self.program.schema.is_extension_type(parent_type))
             && field_type.parent_type != self.program.schema.query_type();
-        if is_server_field {
-            self.errors.push(Diagnostic::error(
-                ValidationMessage::ServerEdgeToClientWithExecTimeResolvers,
-                field.alias_or_name_location(),
-            ));
+        if !is_server_field {
+            return;
+        }
+        let resolver_directive = field_type.directives.named(*RELAY_RESOLVER_DIRECTIVE_NAME);
+        if resolver_directive.is_none() {
+            return;
+        }
+        // Get the fragment_name from the resolver directive
+        let fragment_name_arg = resolver_directive.and_then(|d| {
+            d.arguments
+                .iter()
+                .find(|a| a.name.0 == FRAGMENT_KEY_ARGUMENT_NAME.0)
+        });
+        let fragment_name = match fragment_name_arg {
+            Some(arg) => match arg.get_string_literal() {
+                Some(s) => s,
+                None => return,
+            },
+            None => return, // No @rootFragment — nothing to validate
+        };
+        // Look up the fragment definition
+        let fragment_def_name = FragmentDefinitionName(fragment_name);
+        let fragment = match self.program.fragment(fragment_def_name) {
+            Some(f) => f,
+            None => return, // Fragment not found — other validation will catch this
+        };
+        // Validate each selection is only __typename or id
+        let id_field_name = self.project_config.schema_config.node_interface_id_field;
+        let typename_field_name = "__typename".intern();
+        for selection in &fragment.selections {
+            match selection {
+                Selection::ScalarField(scalar_field) => {
+                    let sel_field_name = self
+                        .program
+                        .schema
+                        .field(scalar_field.definition.item)
+                        .name
+                        .item;
+                    if sel_field_name != typename_field_name && sel_field_name != id_field_name {
+                        self.errors.push(Diagnostic::error(
+                            ValidationMessage::S2CRootFragmentInvalidSelection {
+                                fragment_name,
+                                field_name: sel_field_name,
+                            },
+                            scalar_field.definition.location,
+                        ));
+                    }
+                }
+                Selection::LinkedField(linked_field) => {
+                    let sel_field_name = linked_field.alias_or_name(&self.program.schema);
+                    self.errors.push(Diagnostic::error(
+                        ValidationMessage::S2CRootFragmentInvalidSelection {
+                            fragment_name,
+                            field_name: sel_field_name,
+                        },
+                        linked_field.alias_or_name_location(),
+                    ));
+                }
+                Selection::FragmentSpread(fragment_spread) => {
+                    self.errors.push(Diagnostic::error(
+                        ValidationMessage::S2CRootFragmentInvalidSelection {
+                            fragment_name,
+                            field_name: fragment_spread.fragment.item.0,
+                        },
+                        fragment_spread.fragment.location,
+                    ));
+                }
+                Selection::InlineFragment(inline_fragment) => {
+                    let type_name = inline_fragment.type_condition.map_or_else(
+                        || "inline fragment".intern(),
+                        |tc| self.program.schema.get_type_name(tc),
+                    );
+                    self.errors.push(Diagnostic::error(
+                        ValidationMessage::S2CRootFragmentInvalidSelection {
+                            fragment_name,
+                            field_name: type_name,
+                        },
+                        inline_fragment.spread_location,
+                    ));
+                }
+                Selection::Condition(condition) => {
+                    self.errors.push(Diagnostic::error(
+                        ValidationMessage::S2CRootFragmentInvalidSelection {
+                            fragment_name,
+                            field_name: "@skip/@include condition".intern(),
+                        },
+                        condition.location,
+                    ));
+                }
+            }
         }
     }
 }
