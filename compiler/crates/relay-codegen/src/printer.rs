@@ -487,7 +487,7 @@ impl<'b> JSONPrinter<'b> {
                         // used in different places, this is unsound if we would write to them but
                         // this whole module is based on the idea of a read only JSON tree.
                         if self.use_new_flow_casting_syntax {
-                            f.push_str("([]/* as any*/)");
+                            f.push_str("([]/*:: as any*/)");
                         } else {
                             f.push_str("([]/*: any*/)");
                         }
