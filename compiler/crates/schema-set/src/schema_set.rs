@@ -1591,6 +1591,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_fix_all_types_retains_field_with_arg_referencing_missing_input_object() {
+        let mut set = set_from_sdl(indoc! {r#"
+            type Query {
+              search(filter: MissingInput!): String
+            }
+        "#});
+        set.fix_all_types().unwrap();
+        if let SetType::Object(obj) = set.types.get(&"Query".intern()).unwrap() {
+            assert!(
+                obj.fields.contains_key(&"search".intern()),
+                "Field with arg referencing missing input object should not be removed by fix_all_types"
+            );
+            let search_field = obj.fields.get(&"search".intern()).unwrap();
+            assert!(
+                !search_field.arguments.is_empty(),
+                "Arguments referencing missing input object should not be removed by fix_all_types"
+            );
+        } else {
+            panic!("Expected Object type");
+        }
+    }
+
     // --- fix_all_types_with_schema ---
 
     #[test]
