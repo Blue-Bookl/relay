@@ -1082,6 +1082,12 @@ class RelayReader {
       if (field.backingField.normalizationInfo == null) {
         // @edgeTo case where we need to ensure that the record has `id` field
         storeIDs = clientEdgeResolverResponse.map(itemResponse => {
+          // A plural resolver (e.g. a plural magic fragment) may return a list
+          // with nullish items — a nullable list element. Read those through as a
+          // null edge rather than dereferencing `__typename` on a nullish value.
+          if (itemResponse == null) {
+            return null;
+          }
           const concreteType = field.concreteType ?? itemResponse.__typename;
           invariant(
             typeof concreteType === 'string',
