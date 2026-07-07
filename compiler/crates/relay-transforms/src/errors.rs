@@ -318,6 +318,11 @@ pub enum ValidationMessage {
     ShadowReturnPlaceholderMisplaced {
         return_fragment_name: FragmentDefinitionName,
     },
+
+    #[error(
+        "`@waterfall` on the plural shadow resolver field `{field_name}` is not currently supported. Remove `@waterfall` from this field."
+    )]
+    MagicFragmentPluralWaterfallUnsupported { field_name: StringKey },
 }
 
 #[derive(

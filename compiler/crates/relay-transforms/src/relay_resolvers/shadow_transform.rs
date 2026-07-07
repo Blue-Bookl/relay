@@ -61,9 +61,10 @@ pub(super) fn shadow_resolvers_transform(
 struct ShadowResolversTransform<'program> {
     program: &'program Program,
     feature_flags: &'program FeatureFlags,
-    /// The project's `node_interface_id_field`, used to classify non-Node server
-    /// VALUE returns (which are read in place and exempt from the
-    /// concrete-object gate).
+    /// The project's `node_interface_id_field`, used to classify the
+    /// return-type flavor (concrete `@weak` / non-Node server VALUE /
+    /// abstract-inline): for the concrete-object gate exemption and the
+    /// plural-support decision.
     id_field_name: StringKey,
     errors: Vec<Diagnostic>,
     /// Track which resolver fields have been validated to avoid duplicate validation
@@ -119,18 +120,41 @@ impl<'program> ShadowResolversTransform<'program> {
             return;
         }
 
-        // Plural magic fragments (list return type) are not supported. The
-        // consumer's selections are transplanted onto the shadowed server field
-        // and read off a single returned DataID, so a list return type has no
-        // singular record to read from. Gate it at the compiler so it can never
-        // reach the runtime.
+        // Plural magic fragments: only the STRONG (Node pointer / `EdgeTo`) flavor
+        // is supported. Its consumer selections are transplanted onto the shadowed
+        // server LIST field in the main operation, normalized as N records, and the
+        // resolver returns a list of pointers the reader reads off each record in
+        // place. The inline flavors (concrete `@weak`, non-Node server VALUE
+        // read-in-place, and abstract interfaces with a weak/value implementor)
+        // have no per-item store record to read a list from, so they stay gated.
+        // (The plural + `@waterfall` rejection lives in `client_edges`: `@waterfall`
+        // is a per-use-site directive this schema-level, per-`FieldID`-deduped
+        // validation cannot see.)
         let schema_field = self.program.schema.field(field_id);
         if schema_field.type_.is_list() {
-            self.errors.push(Diagnostic::error(
-                ValidationMessage::ShadowResolverPluralUnsupported,
-                location,
-            ));
-            return;
+            let inner = schema_field.type_.inner();
+            let schema = self.program.schema.as_ref();
+            let is_inline_flavor =
+                relay_schema::definitions::weak_object_instance_field(schema, inner).is_some()
+                    || relay_schema::definitions::is_server_weak_shadow_return(
+                        schema,
+                        inner,
+                        self.id_field_name,
+                        true,
+                    )
+                    || relay_schema::definitions::abstract_shadow_return_has_inline_implementor(
+                        schema,
+                        inner,
+                        self.id_field_name,
+                        true,
+                    );
+            if is_inline_flavor || !inner.is_composite_type() {
+                self.errors.push(Diagnostic::error(
+                    ValidationMessage::ShadowResolverPluralUnsupported,
+                    location,
+                ));
+                return;
+            }
         }
 
         // Union magic fragment return types are not supported. A union member

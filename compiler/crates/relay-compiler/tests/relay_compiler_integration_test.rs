@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<bba1e27b678a0054e55fdfbc5ba256fe>>
+ * @generated SignedSource<<cd1a20044e3c6dde3e108767a6dad73e>>
  */
 
 mod relay_compiler_integration;
@@ -937,10 +937,17 @@ async fn shadow_resolver_magic_fragment_nested_path() {
 }
 
 #[tokio::test]
-async fn shadow_resolver_magic_fragment_plural_invalid() {
-    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural.invalid.input");
-    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural.invalid.expected");
-    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_plural.invalid.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural.invalid.expected", input, expected).await;
+async fn shadow_resolver_magic_fragment_plural() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_plural.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn shadow_resolver_magic_fragment_plural_waterfall_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural_waterfall.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural_waterfall.invalid.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_plural_waterfall.invalid.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_plural_waterfall.invalid.expected", input, expected).await;
 }
 
 #[tokio::test]

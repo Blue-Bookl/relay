@@ -1208,6 +1208,23 @@ impl<'program, 'pc> ClientEdgesTransform<'program, 'pc> {
             None
         };
         if let Some(resolver_info) = shadow_resolver_info {
+            // A PLURAL shadow resolver cannot carry `@waterfall`: the refetch
+            // backstop is a `node(id:)` query, which is inherently singular, and
+            // there is no plural refetch path. Reject it here (rather than in
+            // `shadow_transform`) because `@waterfall` is a per-use-site directive,
+            // visible per occurrence only at this client-edge transform.
+            if field_type.type_.is_list()
+                && let Some(waterfall) = waterfall_directive
+            {
+                self.errors.push(Diagnostic::error(
+                    ValidationMessage::MagicFragmentPluralWaterfallUnsupported {
+                        field_name: field_type.name.item,
+                    },
+                    waterfall.location,
+                ));
+                return Transformed::Keep;
+            }
+
             // Whether a magic fragment can return a pointer to a DIFFERENT server
             // object is a runtime property the compiler cannot decide statically,
             // so the RESOLVER declares it once via `@mayWaterfall`. That single
