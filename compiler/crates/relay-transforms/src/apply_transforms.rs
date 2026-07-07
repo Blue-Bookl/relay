@@ -289,6 +289,7 @@ fn apply_reader_transforms(
             &program,
             &project_config.feature_flags,
             ResolversPipeline::ForReader,
+            project_config.schema_config.node_interface_id_field,
         )
     })?;
 
@@ -381,6 +382,7 @@ fn apply_operation_transforms(
             &program,
             &project_config.feature_flags,
             ResolversPipeline::ForOperation,
+            project_config.schema_config.node_interface_id_field,
         )
     })?;
 
@@ -757,6 +759,7 @@ fn apply_typegen_transforms(
             &program,
             &project_config.feature_flags,
             ResolversPipeline::ForReader,
+            project_config.schema_config.node_interface_id_field,
         )
     })?;
 

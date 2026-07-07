@@ -76,9 +76,12 @@ pub fn relay_resolvers(
     program: &Program,
     feature_flags: &FeatureFlags,
     pipeline: ResolversPipeline,
+    id_field_name: StringKey,
 ) -> DiagnosticsResult<Program> {
-    let transformed_fields_program = relay_resolvers_fields_transform(project_name, program)?;
-    let validated_program = shadow_resolvers_transform(&transformed_fields_program, feature_flags)?;
+    let transformed_fields_program =
+        relay_resolvers_fields_transform(project_name, program, id_field_name)?;
+    let validated_program =
+        shadow_resolvers_transform(&transformed_fields_program, feature_flags, id_field_name)?;
     relay_resolvers_spread_transform(
         &validated_program,
         pipeline,

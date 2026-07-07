@@ -677,6 +677,29 @@ impl<'program, 'pc> ClientEdgesTransform<'program, 'pc> {
         is_waterfall: bool,
         new_selections: &[Selection],
     ) -> Option<ClientEdgeMetadataDirective> {
+        // A CONCRETE non-Node SERVER VALUE return has no abstract
+        // members, so route it through the concrete `ClientObject` machinery (the
+        // same `Type::Object` arm a concrete client edge uses): a `ClientObject`
+        // with empty `model_resolvers` and empty `server_object_operations`. The
+        // consumer's selections are transplanted onto the shadowed server field in
+        // the main operation; the edge reads them INLINE in place off the injected
+        // `__id` (no `ensureClientRecord`, no refetch). `build_ast` emits the
+        // `ServerWeak` `normalizationInfo` for it.
+        if let Type::Object(object_id) = edge_to_type {
+            // A server VALUE return has no global `id` and no separate record, so
+            // `node(id:)` is meaningless: `@waterfall` is a hard error.
+            if is_waterfall {
+                self.push_unexpected_waterfall(field.definition.location);
+            }
+            let type_name = self.program.schema.object(object_id).name.item;
+            return Some(ClientEdgeMetadataDirective::ClientObject {
+                type_name: Some(type_name),
+                model_resolvers: vec![],
+                server_object_operations: vec![],
+                unique_id: self.get_key(),
+            });
+        }
+
         let (members, abstract_type_name) = self.abstract_type_members(edge_to_type)?;
         let server_object_operation_mode = if is_waterfall {
             ServerObjectOperationMode::GenerateWaterfallOperations

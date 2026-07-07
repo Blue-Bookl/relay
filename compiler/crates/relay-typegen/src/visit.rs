@@ -47,6 +47,7 @@ use relay_schema::CUSTOM_SCALAR_DIRECTIVE_NAME;
 use relay_schema::EXPORT_NAME_CUSTOM_SCALAR_ARGUMENT_NAME;
 use relay_schema::PATH_CUSTOM_SCALAR_ARGUMENT_NAME;
 use relay_schema::definitions::ResolverType;
+use relay_schema::definitions::is_server_weak_shadow_return;
 use relay_transforms::ASSIGNABLE_DIRECTIVE_FOR_TYPEGEN;
 use relay_transforms::CATCH_DIRECTIVE_NAME;
 use relay_transforms::CHILDREN_CAN_BUBBLE_METADATA_KEY;
@@ -76,6 +77,7 @@ use schema::TypeReference;
 use schema::definitions::TypeWithDirectives;
 
 use crate::FRAGMENT_PROP_NAME;
+use crate::KEY_CLIENTID;
 use crate::KEY_DATA_ID;
 use crate::KEY_FRAGMENT_SPREADS;
 use crate::KEY_FRAGMENT_TYPE;
@@ -384,6 +386,28 @@ fn generate_resolver_type(
             if let Some(field_id) = normalization_info.weak_object_instance_field {
                 let type_ = &typegen_context.schema.field(field_id).type_.inner();
                 expect_scalar_type(typegen_context, encountered_enums, custom_scalars, type_)
+            } else if is_server_weak_shadow_return(
+                typegen_context.schema,
+                normalization_info.inner_type,
+                typegen_context
+                    .project_config
+                    .schema_config
+                    .node_interface_id_field,
+                resolver_metadata.return_fragment.is_some(),
+            ) {
+                // READ-IN-PLACE shadow (`@returnFragment`) server-value return:
+                // the resolver returns the IDENTITY of the transplanted
+                // record — an object with the concrete `__typename` and `__id`
+                // (the DataID/store key) — and the runtime reads the value in place
+                // off that `__id` (`extractStoreIDFromResponse`). It must NOT be
+                // typed as a `$normalization` import: no normalization artifact is
+                // generated for it (the nested-objects pass skips it), so emitting
+                // that import would be a dangling, unresolvable Flow module.
+                create_server_weak_return_type_ast(
+                    &normalization_info.inner_type,
+                    typegen_context.schema,
+                    runtime_imports,
+                )
             } else {
                 imported_raw_response_types.0.insert(
                     normalization_info.normalization_operation.item.0,
@@ -2934,6 +2958,45 @@ fn create_edge_to_return_type_ast(
     }
 
     AST::ExactObject(ExactObject::new(fields))
+}
+
+/// Return-type AST for a READ-IN-PLACE shadow (`@returnFragment`) server-value
+/// resolver. The resolver returns the IDENTITY of the transplanted
+/// `client:<parentid>:<field>` record so the runtime can read its value in place:
+/// `{ +__typename: "<ConcreteType>", +__id: DataID }`. The runtime helper
+/// `extractStoreIDFromResponse` reads `response.__id` (falling back to
+/// `extractIdFromResponse`) to locate the record.
+///
+/// This mirrors `create_edge_to_return_type_ast` but keys on `__id`
+/// (`KEY_CLIENTID`) instead of the `id` field, and is never an abstract type (a
+/// server value type is always a concrete `Object`), so `__typename` is a single
+/// concrete string literal. Crucially it does NOT emit a `$normalization` import:
+/// no normalization artifact is generated for a read-in-place return, so the
+/// import would be a dangling, unresolvable Flow module.
+fn create_server_weak_return_type_ast(
+    inner_type: &Type,
+    schema: &SDLSchema,
+    runtime_imports: &mut RuntimeImports,
+) -> AST {
+    // Mark that the DataID type is used, and must be imported.
+    runtime_imports.data_id_type = true;
+
+    let type_name = schema.get_type_name(*inner_type);
+
+    AST::ExactObject(ExactObject::new(vec![
+        Prop::KeyValuePair(KeyValuePairProp {
+            key: *KEY_TYPENAME,
+            value: AST::StringLiteral(StringLiteral(type_name)),
+            read_only: true,
+            optional: false,
+        }),
+        Prop::KeyValuePair(KeyValuePairProp {
+            key: *KEY_CLIENTID,
+            value: AST::RawType(*KEY_DATA_ID),
+            read_only: true,
+            optional: false,
+        }),
+    ]))
 }
 
 fn expect_scalar_type(

@@ -50,6 +50,7 @@ pub async fn transform_fixture(fixture: &Fixture<'_>) -> Result<String, String> 
                     &program,
                     &FeatureFlags::default(),
                     ResolversPipeline::ForOperation,
+                    relay_config::SchemaConfig::default().node_interface_id_field,
                 )
             })
             .map_err(|diagnostics| diagnostics_to_sorted_string(base, extensions, &diagnostics))?;

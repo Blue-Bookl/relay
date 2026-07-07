@@ -23,6 +23,7 @@ use graphql_ir::Transformer;
 use graphql_ir::Visitor;
 use graphql_syntax::is_valid_identifier;
 use intern::Lookup;
+use intern::string_key::StringKey;
 use schema::FieldID;
 use schema::Schema;
 use schema::Type;
@@ -45,8 +46,9 @@ use crate::extract_module_name;
 pub(super) fn shadow_resolvers_transform(
     program: &Program,
     feature_flags: &FeatureFlags,
+    id_field_name: StringKey,
 ) -> DiagnosticsResult<Program> {
-    let mut transform = ShadowResolversTransform::new(program, feature_flags);
+    let mut transform = ShadowResolversTransform::new(program, feature_flags, id_field_name);
     let next_program = transform.transform_program(program);
 
     if transform.errors.is_empty() {
@@ -59,16 +61,25 @@ pub(super) fn shadow_resolvers_transform(
 struct ShadowResolversTransform<'program> {
     program: &'program Program,
     feature_flags: &'program FeatureFlags,
+    /// The project's `node_interface_id_field`, used to classify non-Node server
+    /// VALUE returns (which are read in place and exempt from the
+    /// concrete-object gate).
+    id_field_name: StringKey,
     errors: Vec<Diagnostic>,
     /// Track which resolver fields have been validated to avoid duplicate validation
     validated_fields: HashSet<FieldID>,
 }
 
 impl<'program> ShadowResolversTransform<'program> {
-    fn new(program: &'program Program, feature_flags: &'program FeatureFlags) -> Self {
+    fn new(
+        program: &'program Program,
+        feature_flags: &'program FeatureFlags,
+        id_field_name: StringKey,
+    ) -> Self {
         Self {
             program,
             feature_flags,
+            id_field_name,
             errors: Vec::new(),
             validated_fields: HashSet::new(),
         }
@@ -154,11 +165,21 @@ impl<'program> ShadowResolversTransform<'program> {
         // returns are already rejected above; non-composite returns like
         // `RelayResolverValue` fail their own validation paths.)
         let inner = schema_field.type_.inner();
+        // Inline flavors are read directly off the backing record, so they have
+        // no implementors to fan and are exempt from the interface-only gate: a
+        // concrete `@weak` model (read off `<Type>____relay_model_instance`) or a
+        // non-Node server VALUE type (read off `__id`, e.g. `PageStats`).
         let is_inline_object_flavor = relay_schema::definitions::weak_object_instance_field(
             self.program.schema.as_ref(),
             inner,
         )
-        .is_some();
+        .is_some()
+            || relay_schema::definitions::is_server_weak_shadow_return(
+                self.program.schema.as_ref(),
+                inner,
+                self.id_field_name,
+                true,
+            );
         if matches!(inner, Type::Object(_)) && !is_inline_object_flavor {
             self.errors.push(Diagnostic::error(
                 ValidationMessage::MagicFragmentConcreteObjectReturnUnsupported {

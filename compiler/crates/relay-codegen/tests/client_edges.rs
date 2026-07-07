@@ -59,6 +59,7 @@ pub async fn transform_fixture(fixture: &Fixture<'_>) -> Result<String, String> 
                         &program,
                         &project_config.feature_flags,
                         ResolversPipeline::ForOperation,
+                        project_config.schema_config.node_interface_id_field,
                     )
                 })
                 .unwrap();

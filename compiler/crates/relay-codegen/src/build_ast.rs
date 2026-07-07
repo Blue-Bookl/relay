@@ -1791,7 +1791,39 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
                 Primitive::String(self.schema.get_type_name(normalization_info.inner_type))
             };
 
-            let normalization_info = if normalization_info.weak_object_instance_field.is_some() {
+            // A shadow (`@returnFragment`) resolver returning a non-Node SERVER
+            // VALUE type is read INLINE IN PLACE off the transplanted
+            // `client:<parentid>:<field>` record. It takes the same
+            // inline reader branch as `OutputType`/`WeakModel` (no
+            // `ensureClientRecord`, no refetch) but must NOT carry a
+            // `normalizationNode`: the value is already normalized once by the
+            // transplant, so a second normalization would double-store it. We emit
+            // a dedicated `ServerWeak` kind WITHOUT a `normalizationNode`;
+            // `LiveResolverCache._setResolverValue` skips re-normalization for it,
+            // and the reader sources `storeID` from the resolver-returned `__id`.
+            // This read-in-place classification is the single source of truth in
+            // `relay_schema::definitions::is_server_weak_shadow_return`, shared
+            // with `field_transform` (which routed it to this `Composite` arm),
+            // the nested-objects pass (which skips its normalization operation),
+            // and `relay-typegen` (which emits a `{__typename, __id}` identity
+            // return type rather than a dangling `$normalization` import). A
+            // `@weak` model is a client-extension type, so the helper returns
+            // `false` for it and the `weak_object_instance_field` branch below
+            // still handles weak returns.
+            let is_server_weak = relay_schema::definitions::is_server_weak_shadow_return(
+                self.schema,
+                normalization_info.inner_type,
+                self.project_config.schema_config.node_interface_id_field,
+                relay_resolver_metadata.return_fragment.is_some(),
+            );
+
+            let normalization_info = if is_server_weak {
+                object! {
+                    kind: Primitive::String(CODEGEN_CONSTANTS.server_weak),
+                    concrete_type: concrete_type,
+                    plural: Primitive::Bool(normalization_info.plural),
+                }
+            } else if normalization_info.weak_object_instance_field.is_some() {
                 object! {
                     kind: Primitive::String(CODEGEN_CONSTANTS.weak_model),
                     concrete_type: concrete_type,

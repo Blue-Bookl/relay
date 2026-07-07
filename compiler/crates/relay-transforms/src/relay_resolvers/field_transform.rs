@@ -102,8 +102,9 @@ pub struct ResolverInfo {
 pub(super) fn relay_resolvers_fields_transform(
     project_name: ProjectName,
     program: &Program,
+    id_field_name: StringKey,
 ) -> DiagnosticsResult<Program> {
-    let mut transform = RelayResolverFieldTransform::new(project_name, program);
+    let mut transform = RelayResolverFieldTransform::new(project_name, program, id_field_name);
     let next_program = transform
         .transform_program(program)
         .replace_or_else(|| program.clone());
@@ -120,15 +121,24 @@ struct RelayResolverFieldTransform<'program> {
     program: &'program Program,
     errors: Vec<Diagnostic>,
     path: Vec<&'program str>,
+    /// The project's `node_interface_id_field` (`id` by default). Used to detect a
+    /// non-Node server VALUE return type (a server object with no such field) for
+    /// the read-in-place shadow arm.
+    id_field_name: StringKey,
 }
 
 impl<'program> RelayResolverFieldTransform<'program> {
-    fn new(project_name: ProjectName, program: &'program Program) -> Self {
+    fn new(
+        project_name: ProjectName,
+        program: &'program Program,
+        id_field_name: StringKey,
+    ) -> Self {
         Self {
             program,
             errors: Default::default(),
             path: Vec::new(),
             project_name,
+            id_field_name,
         }
     }
 
@@ -220,6 +230,24 @@ impl<'program> RelayResolverFieldTransform<'program> {
                     let has_output_type =
                         resolver_info.has_output_type && resolver_info.return_fragment.is_none();
 
+                    // A shadow (`@returnFragment`) resolver whose return type is a
+                    // non-Node SERVER VALUE type (no `id`, not a Node, not `@weak`)
+                    // is read INLINE in place off the transplanted
+                    // `client:<parentid>:<field>` record via its injected `__id`.
+                    // Like the `@weak` arm it has no DataID pointer to
+                    // return and no separate record to refetch, so it must reach
+                    // the inline `Composite` arm rather than `EdgeTo`. `build_ast`
+                    // detects the same server-value classification to emit a
+                    // read-in-place `normalizationInfo` (no `normalizationNode`),
+                    // so no second normalization (double-store) occurs.
+                    let is_shadow_server_value_return =
+                        relay_schema::definitions::is_server_weak_shadow_return(
+                            self.program.schema.as_ref(),
+                            inner_type,
+                            self.id_field_name,
+                            resolver_info.return_fragment.is_some(),
+                        );
+
                     let output_type_info = if weak_object_instance_field.is_some() {
                         // Concrete `@weak` return: route to the inline arm,
                         // carrying the model-instance field so `build_ast` emits
@@ -237,6 +265,24 @@ impl<'program> RelayResolverFieldTransform<'program> {
                             plural: schema_field.type_.is_list(),
                             normalization_operation,
                             weak_object_instance_field,
+                        })
+                    } else if is_shadow_server_value_return {
+                        // Server VALUE return read in place: route to the inline
+                        // `Composite` arm (NOT `EdgeTo`). `weak_object_instance_field`
+                        // is `None` (it is not a `@weak` model); `build_ast`
+                        // recognizes the server-value classification and emits a
+                        // `ServerWeak` `normalizationInfo` so the runtime reads the
+                        // transplanted record in place with NO second normalization.
+                        let normalization_operation = generate_name_for_nested_object_operation(
+                            self.project_name,
+                            &self.program.schema,
+                            self.program.schema.field(field.definition().item),
+                        );
+                        ResolverOutputTypeInfo::Composite(ResolverNormalizationInfo {
+                            inner_type,
+                            plural: schema_field.type_.is_list(),
+                            normalization_operation,
+                            weak_object_instance_field: None,
                         })
                     } else if has_output_type {
                         if inner_type.is_composite_type() {

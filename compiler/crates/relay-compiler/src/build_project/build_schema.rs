@@ -123,7 +123,11 @@ fn build_schema_impl(
 
         // Validate
         log_event.time("validate_resolver_schema_time", || {
-            validate_resolver_schema(&schema, &project_config.feature_flags)
+            validate_resolver_schema(
+                &schema,
+                &project_config.feature_flags,
+                project_config.schema_config.node_interface_id_field,
+            )
         })?;
         log_event.time("validate_composite_schema_time", || {
             maybe_validate_schema(project_config, &schema)
@@ -194,7 +198,11 @@ fn build_schema_impl(
     // Now that the schema has been fully extended to include all Resolver types
     // and fields we can apply resolver-specific validations.
     log_event.time("validate_resolver_schema_time", || {
-        validate_resolver_schema(&schema, &project_config.feature_flags)
+        validate_resolver_schema(
+            &schema,
+            &project_config.feature_flags,
+            project_config.schema_config.node_interface_id_field,
+        )
     })?;
 
     log_event.time("validate_composite_schema_time", || {

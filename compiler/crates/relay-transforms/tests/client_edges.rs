@@ -59,6 +59,7 @@ pub async fn transform_fixture(fixture: &Fixture<'_>) -> Result<String, String> 
             &next_program,
             &project_config.feature_flags,
             ResolversPipeline::ForOperation,
+            project_config.schema_config.node_interface_id_field,
         )
         .map_err(|diagnostics| diagnostics_to_sorted_string(fixture.content, &diagnostics))?;
 
