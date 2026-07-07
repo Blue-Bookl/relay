@@ -78,7 +78,7 @@ export type SingularReaderSelector = {
   readonly kind: 'SingularReaderSelector',
   readonly dataID: DataID,
   readonly isWithinUnmatchedTypeRefinement: boolean,
-  readonly clientEdgeTraversalPath: ClientEdgeTraversalPath | null,
+  readonly parentClientEdge: ClientEdgeTraversalInfo | null,
   readonly node: ReaderFragment,
   readonly owner: RequestDescriptor,
   readonly variables: Variables,
@@ -127,9 +127,6 @@ export type ClientEdgeTraversalInfo = {
   readonly readerClientEdge: {readonly operation: ConcreteRequest, ...},
   readonly clientEdgeDestinationID: DataID,
 };
-
-export type ClientEdgeTraversalPath =
-  ReadonlyArray<ClientEdgeTraversalInfo | null>;
 
 export type MissingClientEdgeRequestInfo = {
   readonly request: ConcreteRequest,
