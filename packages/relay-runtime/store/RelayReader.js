@@ -1073,20 +1073,28 @@ class RelayReader {
         backingField.path,
         this._owner.identifier,
       );
-      let storeIDs: ReadonlyArray<DataID>;
       invariant(
         field.kind === 'ClientEdgeToClientObject',
         'Unexpected Client Edge to plural server type `%s`. This should be prevented by the compiler.',
         field.kind,
       );
+      let storeIDs: Array<?DataID>;
+      let perItemEdges: ?Array<ClientEdgeTraversalInfo | null>;
       if (field.backingField.normalizationInfo == null) {
-        // @edgeTo case where we need to ensure that the record has `id` field
-        storeIDs = clientEdgeResolverResponse.map(itemResponse => {
+        // @edgeTo case: compute storeIDs and per-item traversal segments.
+        // Server-type items get a segment so that missing data in their
+        // sub-tree triggers a waterfall refetch; all other items get null.
+        storeIDs = [];
+        perItemEdges = [];
+        for (let i = 0; i < clientEdgeResolverResponse.length; i++) {
+          const itemResponse = clientEdgeResolverResponse[i];
           // A plural resolver (e.g. a plural magic fragment) may return a list
           // with nullish items — a nullable list element. Read those through as a
           // null edge rather than dereferencing `__typename` on a nullish value.
           if (itemResponse == null) {
-            return null;
+            storeIDs.push(null);
+            perItemEdges.push(null);
+            continue;
           }
           const concreteType = field.concreteType ?? itemResponse.__typename;
           invariant(
@@ -1100,7 +1108,6 @@ class RelayReader {
             backingField.path,
             this._owner.identifier,
           );
-
           const modelResolvers = field.modelResolvers;
           if (modelResolvers != null) {
             const modelResolver = modelResolvers[concreteType];
@@ -1111,24 +1118,39 @@ class RelayReader {
                 concreteType,
               );
               const model = this._readResolverFieldImpl(modelResolver, id);
-              return model != null ? id : null;
+              storeIDs.push(model != null ? id : null);
+              perItemEdges.push(null);
             } else {
-              // Server/CSE type: use the original ID directly.
-              return localId;
+              storeIDs.push(localId);
+
+              // Server/CLient Schema Extension type: check for a refetch operation so that
+              // missing data in this item's sub-tree triggers a waterfall.
+              const serverOperation =
+                field.serverObjectOperations?.[concreteType] ?? null;
+              if (serverOperation != null) {
+                perItemEdges.push({
+                  clientEdgeDestinationID: localId,
+                  readerClientEdge: {operation: serverOperation},
+                });
+              } else {
+                perItemEdges.push(null);
+              }
             }
+          } else {
+            // No model resolvers — concrete client object edge.
+            storeIDs.push(
+              this._resolverCache.ensureClientRecord(localId, concreteType),
+            );
+            perItemEdges.push(null);
           }
-          // No model resolvers — concrete client object edge.
-          const id = this._resolverCache.ensureClientRecord(
-            localId,
-            concreteType,
-          );
-          return id;
-        });
+        }
       } else {
-        // The normalization process in LiveResolverCache should take care of generating the correct ID.
+        // The normalization process in LiveResolverCache should take care of
+        // generating the correct ID.
         storeIDs = clientEdgeResolverResponse.map(obj =>
           extractIdFromResponse(obj, backingField.path, this._owner.identifier),
         );
+        perItemEdges = null;
       }
       const prevParentClientEdge = this._parentClientEdge;
       this._parentClientEdge = null;
@@ -1137,6 +1159,7 @@ class RelayReader {
         storeIDs,
         record,
         data,
+        perItemEdges,
       );
       this._parentClientEdge = prevParentClientEdge;
       data[fieldName] = edgeValues;
@@ -1447,6 +1470,7 @@ class RelayReader {
     linkedIDs: ?ReadonlyArray<?DataID>,
     record: Record,
     data: SelectorData,
+    perItemEdges?: ?ReadonlyArray<ClientEdgeTraversalInfo | null>,
   ): ?unknown {
     const fieldName = field.alias ?? field.name;
 
@@ -1490,9 +1514,14 @@ class RelayReader {
       );
       const prevErrors = this._fieldErrors;
       this._fieldErrors = null;
+      const prevParentClientEdge = this._parentClientEdge;
+      if (perItemEdges != null) {
+        this._parentClientEdge = perItemEdges[nextIndex] ?? null;
+      }
       // $FlowFixMe[cannot-write]
       // $FlowFixMe[incompatible-variance]
       linkedArray[nextIndex] = this._traverse(field, linkedID, prevItem);
+      this._parentClientEdge = prevParentClientEdge;
       this._prependPreviousErrors(prevErrors, nextIndex);
     });
     this._prependPreviousErrors(prevErrors, fieldName);

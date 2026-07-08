@@ -569,12 +569,8 @@ describe('RelayReader Client Edges behavior', () => {
       resolverCache,
     );
 
-    // BUG: server-type items in a plural mixed interface edge are silently
-    // skipped — no waterfall refetch is queued even though Chicken's `legs`
-    // field is missing from the store. These assertions should change to
-    // `toEqual(1)` and `toBe(chickenId)` once the bug is fixed.
-    expect(missingClientEdges?.length).toEqual(undefined);
-    expect(missingClientEdges?.[0]?.clientEdgeDestinationID).toEqual(undefined);
+    expect(missingClientEdges?.length).toEqual(1);
+    expect(missingClientEdges?.[0]?.clientEdgeDestinationID).toBe(chickenId);
   });
 
   it('propagates missing client edge data errors from the resolver up to the reader', () => {
