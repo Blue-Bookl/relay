@@ -5,13 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use common::ArgumentName;
 use common::Diagnostic;
 use common::DiagnosticsResult;
 use common::Location;
 use common::NamedItem;
 use common::WithLocation;
+use graphql_ir::Argument;
 use graphql_ir::Condition;
 use graphql_ir::Directive;
 use graphql_ir::Field as IrField;
@@ -25,6 +28,7 @@ use graphql_ir::Selection;
 use graphql_ir::Transformed;
 use graphql_ir::TransformedValue;
 use graphql_ir::Transformer;
+use graphql_ir::Value;
 use graphql_ir::VariableName;
 use intern::string_key::StringKey;
 use relay_schema::definitions::weak_object_instance_field;
@@ -282,10 +286,35 @@ impl<'program> RelayResolverSpreadTransform<'program> {
         // we splice in the consumer's selections (re-bound onto the shadowed
         // server type). Returns `None` (no marker found) only on an unvalidated
         // magic-fragment edge, which earlier validation passes prevent.
+        // Build a substitution from the root fragment's local argument variables
+        // (its `@argumentDefinitions`) to the values the consumer passed at the
+        // resolver field call site. The transplanted path is spliced directly into
+        // the consumer operation, so a reference to a root-fragment argument
+        // variable (e.g. `nodes(ids: $ids)`) must be remapped to the consumer's
+        // value (e.g. `$mixed_campaign_group_ids`); otherwise the operation would
+        // reference an undefined variable. For the normal (non-transplanted)
+        // resolver spread this remapping is done by `apply_fragment_arguments`.
+        let no_field_arguments = Vec::new();
+        let field_arguments = match metadata.backing_field {
+            Selection::LinkedField(field) => &field.arguments,
+            Selection::ScalarField(field) => &field.arguments,
+            _ => &no_field_arguments,
+        };
+        let argument_substitutions: HashMap<VariableName, Value> = root_fragment
+            .variable_definitions
+            .iter()
+            .filter_map(|variable_definition| {
+                field_arguments
+                    .named(ArgumentName(variable_definition.name.item.0))
+                    .map(|argument| (variable_definition.name.item, argument.value.item.clone()))
+            })
+            .collect();
+
         self.clone_shadowed_path(
             &root_fragment.selections,
             return_fragment.item,
             &metadata.linked_field.selections,
+            &argument_substitutions,
         )
     }
 
@@ -306,6 +335,7 @@ impl<'program> RelayResolverSpreadTransform<'program> {
         selections: &[Selection],
         return_fragment_name: FragmentDefinitionName,
         consumer_selections: &[Selection],
+        argument_substitutions: &HashMap<VariableName, Value>,
     ) -> Option<Vec<Selection>> {
         for selection in selections {
             match selection {
@@ -341,6 +371,10 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                         return Some(vec![Selection::LinkedField(Arc::new(LinkedField {
                             directives,
                             selections: new_selections,
+                            arguments: substitute_arguments(
+                                &field.arguments,
+                                argument_substitutions,
+                            ),
                             ..field.as_ref().clone()
                         }))]);
                     }
@@ -351,9 +385,14 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                         &field.selections,
                         return_fragment_name,
                         consumer_selections,
+                        argument_substitutions,
                     ) {
                         return Some(vec![Selection::LinkedField(Arc::new(LinkedField {
                             selections: inner,
+                            arguments: substitute_arguments(
+                                &field.arguments,
+                                argument_substitutions,
+                            ),
                             ..field.as_ref().clone()
                         }))]);
                     }
@@ -363,6 +402,7 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                         &fragment.selections,
                         return_fragment_name,
                         consumer_selections,
+                        argument_substitutions,
                     ) {
                         return Some(vec![Selection::InlineFragment(Arc::new(InlineFragment {
                             selections: inner,
@@ -375,6 +415,7 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                         &condition.selections,
                         return_fragment_name,
                         consumer_selections,
+                        argument_substitutions,
                     ) {
                         return Some(vec![Selection::Condition(Arc::new(Condition {
                             selections: inner,
@@ -856,6 +897,48 @@ impl<'program> Transformer<'program> for RelayResolverSpreadTransform<'program> 
                 })))
             }
             None => self.default_transform_inline_fragment(fragment),
+        }
+    }
+}
+
+/// Substitute references to a resolver root fragment's local argument variables
+/// (declared via its `@argumentDefinitions`) with the values the consumer passed
+/// at the resolver field call site. Used when the magic-fragment transplant
+/// clones the root-fragment path into the consumer operation: a cloned field
+/// argument such as `nodes(ids: $ids)` must be rewritten to the consumer's value
+/// (e.g. `nodes(ids: $someConsumerVar)`), otherwise the operation references a
+/// variable that is not defined there.
+fn substitute_arguments(
+    arguments: &[Argument],
+    argument_substitutions: &HashMap<VariableName, Value>,
+) -> Vec<Argument> {
+    arguments
+        .iter()
+        .map(|argument| Argument {
+            value: WithLocation::new(
+                argument.value.location,
+                substitute_value(&argument.value.item, argument_substitutions),
+            ),
+            ..argument.clone()
+        })
+        .collect()
+}
+
+fn substitute_value(value: &Value, argument_substitutions: &HashMap<VariableName, Value>) -> Value {
+    match value {
+        Value::Variable(variable) => argument_substitutions
+            .get(&variable.name.item)
+            .cloned()
+            .unwrap_or_else(|| value.clone()),
+        Value::Constant(_) => value.clone(),
+        Value::List(items) => Value::List(
+            items
+                .iter()
+                .map(|item| substitute_value(item, argument_substitutions))
+                .collect(),
+        ),
+        Value::Object(arguments) => {
+            Value::Object(substitute_arguments(arguments, argument_substitutions))
         }
     }
 }

@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<c8d2e28c1063657af1dc7fe0b9d48bce>>
+ * @generated SignedSource<<ce495b52774212a4826560198ee3a162>>
  */
 
 mod relay_compiler_integration;
@@ -710,6 +710,13 @@ async fn resolver_returns_weak_client_schema_type() {
     let input = include_str!("relay_compiler_integration/fixtures/resolver_returns_weak_client_schema_type.input");
     let expected = include_str!("relay_compiler_integration/fixtures/resolver_returns_weak_client_schema_type.expected");
     test_fixture(transform_fixture, file!(), "resolver_returns_weak_client_schema_type.input", "relay_compiler_integration/fixtures/resolver_returns_weak_client_schema_type.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn resolver_root_fragment_list_arg_binding() {
+    let input = include_str!("relay_compiler_integration/fixtures/resolver_root_fragment_list_arg_binding.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/resolver_root_fragment_list_arg_binding.expected");
+    test_fixture(transform_fixture, file!(), "resolver_root_fragment_list_arg_binding.input", "relay_compiler_integration/fixtures/resolver_root_fragment_list_arg_binding.expected", input, expected).await;
 }
 
 #[tokio::test]
