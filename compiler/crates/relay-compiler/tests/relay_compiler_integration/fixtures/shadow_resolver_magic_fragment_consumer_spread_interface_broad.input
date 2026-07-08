@@ -1,8 +1,9 @@
-==================================== INPUT ====================================
 //- UserCombinedPage.js
-// RED: a consumer fragment spread whose type condition is an ABSTRACT type
-// (interface `IPage`) on a magic-fragment field is rejected. Only
-// concrete-typed consumer spreads are supported; abstract spreads are not.
+// A consumer spreads a fragment on a BROADER interface (`Node`) than the
+// magic-fragment field's return interface (`IPage`). `Node` is implemented by
+// server types `User` and `Page`; the spread is valid on `combined_page: IPage`
+// because `Node` overlaps `IPage` through `Page`. The `... on User` arm is a dead
+// polymorphic arm for this use site (the field can never be a `User`).
 /**
  * @relayField User.combined_page: IPage
  * @rootFragment UserCombinedPageResolverFragment
@@ -14,16 +15,22 @@ graphql`fragment UserCombinedPageResolverFragment on User {
   }
 }`
 
-//- IPageFields.js
-graphql`fragment IPageFields on IPage {
-  title
+//- NodeFields.js
+graphql`fragment NodeFields on Node {
+  id
+  ... on User {
+    name
+  }
+  ... on Page {
+    title
+  }
 }`
 
 //- UserConsumer.js
 graphql`query UserConsumerQuery {
   me {
     combined_page {
-      ...IPageFields
+      ...NodeFields @alias(as: "nodeFields")
     }
   }
 }`
@@ -43,7 +50,7 @@ graphql`query UserConsumerQuery {
 //- schema.graphql
 type Query { me: User, node(id: ID!): Node }
 interface Node { id: ID! }
-type User { name: String, page: Page }
+type User implements Node { id: ID!, name: String, page: Page }
 type Page implements Node { id: ID!, title: String }
 
 //- schema-extensions/extension.graphql
@@ -53,11 +60,3 @@ interface IPage implements Node {
 }
 
 extend type Page implements IPage
-==================================== OUTPUT ===================================
-✖︎ Fragment spread `IPageFields` in selections on a shadow resolver field has the abstract (interface or union) type condition `IPage`. Only concrete-typed consumer spreads are supported for now. Use a fragment on a concrete type, or inline the selection.
-
-  UserConsumer.js:4:10
-    3 │     combined_page {
-    4 │       ...IPageFields
-      │          ^^^^^^^^^^^
-    5 │     }

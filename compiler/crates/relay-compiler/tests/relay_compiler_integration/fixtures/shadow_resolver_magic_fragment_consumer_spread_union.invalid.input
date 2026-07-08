@@ -1,7 +1,9 @@
 //- UserCombinedPage.js
-// RED: a consumer fragment spread whose type condition is an ABSTRACT type
-// (interface `IPage`) on a magic-fragment field is rejected. Only
-// concrete-typed consumer spreads are supported; abstract spreads are not.
+// RED: a consumer fragment spread whose type condition is a UNION on a
+// magic-fragment field is still rejected. Only concrete-typed and
+// interface-typed consumer spreads, but not union-typed ones (a union arm is not
+// fanned per-implementor by `relay_resolvers_abstract_types`, which only handles
+// interfaces).
 /**
  * @relayField User.combined_page: IPage
  * @rootFragment UserCombinedPageResolverFragment
@@ -13,16 +15,16 @@ graphql`fragment UserCombinedPageResolverFragment on User {
   }
 }`
 
-//- IPageFields.js
-graphql`fragment IPageFields on IPage {
-  title
+//- PageUnionFields.js
+graphql`fragment PageUnionFields on PageUnion {
+  __typename
 }`
 
 //- UserConsumer.js
 graphql`query UserConsumerQuery {
   me {
     combined_page {
-      ...IPageFields
+      ...PageUnionFields @alias(as: "pageUnion")
     }
   }
 }`
@@ -52,3 +54,5 @@ interface IPage implements Node {
 }
 
 extend type Page implements IPage
+
+union PageUnion = Page

@@ -276,9 +276,9 @@ pub enum ValidationMessage {
     ShadowReturnFragmentSpreadNoInlineUnsupported { fragment_name: StringKey },
 
     #[error(
-        "Fragment spread `{fragment_name}` in selections on a shadow resolver field has the abstract (interface or union) type condition `{type_condition_name}`. Only concrete-typed consumer spreads are supported for now. Use a fragment on a concrete type, or inline the selection."
+        "Fragment spread `{fragment_name}` in selections on a shadow resolver field has the union type condition `{type_condition_name}`. Only concrete-typed and interface-typed consumer spreads are supported. Use a fragment on a concrete type or an interface, or inline the selection."
     )]
-    ShadowReturnFragmentSpreadAbstractTypeUnsupported {
+    ShadowReturnFragmentSpreadUnionTypeUnsupported {
         fragment_name: StringKey,
         type_condition_name: StringKey,
     },

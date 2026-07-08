@@ -323,7 +323,8 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                             .field(field.definition.item)
                             .type_
                             .inner();
-                        let rebound = self.rebind_selections(consumer_selections, shadowed_type);
+                        let rebound =
+                            self.rebind_selections(consumer_selections, shadowed_type, false);
 
                         let mut new_selections = field.selections.clone();
                         new_selections.extend(rebound);
@@ -390,17 +391,35 @@ impl<'program> RelayResolverSpreadTransform<'program> {
     /// Re-bind a consumer's selection set, authored against the resolver's
     /// interface return type, onto `parent_type` (the shadowed server type).
     /// Scalar and linked fields are looked up by name on `parent_type`; inline
-    /// fragments and conditions recurse. Selections that have no counterpart on
-    /// the shadowed type, and fragment spreads, produce a focused validation
-    /// error (rather than silently being dropped or mis-namespaced).
-    fn rebind_selections(&mut self, selections: &[Selection], parent_type: Type) -> Vec<Selection> {
+    /// fragments and conditions recurse.
+    ///
+    /// `drop_incompatible` distinguishes two contexts. For a consumer's DIRECT
+    /// selections (`false`) a server inline arm that cannot match the shadowed
+    /// type is a genuine mistake and is a focused error. When inline-expanding a
+    /// polymorphic INTERFACE spread's body (`true`) such arms are legitimately
+    /// dead (the body is reused across every implementor of its interface, only
+    /// some of which this field can be) and are silently dropped, and any inline
+    /// fragment / condition left empty by dropping its children is pruned.
+    fn rebind_selections(
+        &mut self,
+        selections: &[Selection],
+        parent_type: Type,
+        drop_incompatible: bool,
+    ) -> Vec<Selection> {
         selections
             .iter()
-            .filter_map(|selection| self.rebind_selection(selection, parent_type))
+            .filter_map(|selection| {
+                self.rebind_selection(selection, parent_type, drop_incompatible)
+            })
             .collect()
     }
 
-    fn rebind_selection(&mut self, selection: &Selection, parent_type: Type) -> Option<Selection> {
+    fn rebind_selection(
+        &mut self,
+        selection: &Selection,
+        parent_type: Type,
+        drop_incompatible: bool,
+    ) -> Option<Selection> {
         match selection {
             Selection::ScalarField(field) => {
                 let field_name = self.program.schema.field(field.definition.item).name.item;
@@ -416,7 +435,14 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                 let definition =
                     self.rebind_field(field_name, parent_type, field.alias_or_name_location())?;
                 let inner_type = self.program.schema.field(definition).type_.inner();
-                let selections = self.rebind_selections(&field.selections, inner_type);
+                let selections =
+                    self.rebind_selections(&field.selections, inner_type, drop_incompatible);
+                // A linked field whose children all dropped (interface-spread
+                // expansion) must be pruned: an empty selection set on a composite
+                // field is invalid GraphQL and `flatten` will not remove it.
+                if drop_incompatible && selections.is_empty() {
+                    return None;
+                }
                 Some(Selection::LinkedField(Arc::new(LinkedField {
                     definition: WithLocation::new(field.definition.location, definition),
                     selections,
@@ -437,11 +463,16 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                 // - A server arm that overlaps the shadowed type is transplanted
                 //   unchanged.
                 // - A non-overlapping server arm (e.g. `... on Comment` under a
-                //   `Page`) can never match and is a genuine error.
+                //   `Page`) can never match: a genuine error in a direct selection,
+                //   but a dead polymorphic arm (silently dropped) when expanding an
+                //   interface spread's body (`drop_incompatible`).
                 if let Some(type_condition) = fragment.type_condition {
                     match self.classify_inline_fragment_type(type_condition, parent_type) {
                         MagicFragmentInlineFragmentArm::DropClientExtension => return None,
                         MagicFragmentInlineFragmentArm::Incompatible => {
+                            if drop_incompatible {
+                                return None;
+                            }
                             self.errors.push(Diagnostic::error(
                                 ValidationMessage::ShadowReturnIncompatibleInlineFragmentType {
                                     type_condition_name: self
@@ -460,14 +491,26 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                 // Keep the type condition; recurse using it (or the parent type
                 // when there is no explicit condition).
                 let inner_type = fragment.type_condition.unwrap_or(parent_type);
-                let selections = self.rebind_selections(&fragment.selections, inner_type);
+                let selections =
+                    self.rebind_selections(&fragment.selections, inner_type, drop_incompatible);
+                // When dropping dead arms (interface-spread expansion), an inline
+                // fragment whose children all dropped is pruned -- a typed empty
+                // inline fragment would otherwise survive `flatten` into the
+                // normalized operation.
+                if drop_incompatible && selections.is_empty() {
+                    return None;
+                }
                 Some(Selection::InlineFragment(Arc::new(InlineFragment {
                     selections,
                     ..fragment.as_ref().clone()
                 })))
             }
             Selection::Condition(condition) => {
-                let selections = self.rebind_selections(&condition.selections, parent_type);
+                let selections =
+                    self.rebind_selections(&condition.selections, parent_type, drop_incompatible);
+                if drop_incompatible && selections.is_empty() {
+                    return None;
+                }
                 Some(Selection::Condition(Arc::new(Condition {
                     selections,
                     ..condition.as_ref().clone()
@@ -479,8 +522,9 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                 // the main operation), while the reader pipeline keeps the spread
                 // verbatim (so masking / `$fragmentSpreads` / the child
                 // `useFragment` are unaffected -- this transform's reader pass
-                // never reaches here). Only concrete-typed spreads are
-                // supported; the gates below reject cases that would miscompile.
+                // never reaches here). Concrete-typed and interface-typed spreads
+                // are supported; the gates below reject cases (`@arguments`,
+                // `@no_inline`, union type conditions) that would miscompile.
                 let Some(fragment) = self.program.fragment(spread.fragment.item) else {
                     // The fragment is guaranteed present once validation has run;
                     // a missing one here is a compiler bug. Drop the spread rather
@@ -520,49 +564,110 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                     return None;
                 }
 
-                // Abstract spreads are not yet supported; for now only concrete
-                // type conditions are supported.
-                if fragment.type_condition.is_abstract_type() {
-                    self.errors.push(Diagnostic::error(
-                        ValidationMessage::ShadowReturnFragmentSpreadAbstractTypeUnsupported {
-                            fragment_name: spread.fragment.item.0,
-                            type_condition_name: self
-                                .program
-                                .schema
-                                .get_type_name(fragment.type_condition),
-                        },
-                        spread.fragment.location,
-                    ));
-                    return None;
-                }
-
-                // Concrete type condition: classify and route exactly like the
-                // `InlineFragment` arm above.
-                match self.classify_inline_fragment_type(fragment.type_condition, parent_type) {
-                    MagicFragmentInlineFragmentArm::DropClientExtension => None,
-                    MagicFragmentInlineFragmentArm::Incompatible => {
-                        self.errors.push(Diagnostic::error(
-                            ValidationMessage::ShadowReturnIncompatibleInlineFragmentType {
-                                type_condition_name: self
-                                    .program
-                                    .schema
-                                    .get_type_name(fragment.type_condition),
-                                type_name: self.program.schema.get_type_name(parent_type),
-                            },
-                            spread.fragment.location,
-                        ));
-                        None
-                    }
-                    MagicFragmentInlineFragmentArm::TransplantServer => {
+                // Route by the spread's type condition.
+                //
+                // - A CONCRETE (object) type condition classifies and routes
+                //   exactly like the `InlineFragment` arm above.
+                // - An INTERFACE type condition is inline-expanded. By the time
+                //   this transform runs, `relay_resolvers_abstract_types` (run
+                //   earlier, in `apply_common_transforms`) has already fanned a
+                //   mixed-interface fragment's body into one concrete inline arm
+                //   per implementor. Re-binding that body onto the shadowed server
+                //   type lets the per-arm classification above transplant the
+                //   server arms and drop the client-extension arms (which are read
+                //   through the model edge minted in `client_edges`).
+                // - A UNION type condition is not yet supported.
+                match fragment.type_condition {
+                    Type::Interface(_) => {
+                        // The spread can be valid on the field while overlapping
+                        // the return interface only through a client implementor
+                        // (e.g. a fragment on an unrelated interface that shares
+                        // just the client model). Transplant onto the server only
+                        // when the spread's interface actually overlaps the
+                        // shadowed server type; otherwise it contributes nothing to
+                        // the server operation and is served entirely by the model
+                        // edge.
+                        if !self
+                            .program
+                            .schema
+                            .are_overlapping_types(fragment.type_condition, parent_type)
+                        {
+                            return None;
+                        }
+                        // The body is polymorphic over the interface's implementors,
+                        // so expand it in drop-incompatible mode: arms for other
+                        // implementors (and client-extension arms) are dropped, only
+                        // what applies to the shadowed server type is transplanted.
                         let selections =
-                            self.rebind_selections(&fragment.selections, fragment.type_condition);
+                            self.rebind_selections(&fragment.selections, parent_type, true);
+                        if selections.is_empty() {
+                            return None;
+                        }
+                        // A type-condition-less inline fragment groups the
+                        // (already concretely-typed) fanned arms into the single
+                        // selection this arm returns; `flatten` dissolves it before
+                        // codegen.
                         Some(Selection::InlineFragment(Arc::new(InlineFragment {
-                            type_condition: Some(fragment.type_condition),
+                            type_condition: None,
                             directives: vec![],
                             selections,
                             spread_location: spread.fragment.location,
                         })))
                     }
+                    Type::Union(_) => {
+                        self.errors.push(Diagnostic::error(
+                            ValidationMessage::ShadowReturnFragmentSpreadUnionTypeUnsupported {
+                                fragment_name: spread.fragment.item.0,
+                                type_condition_name: self
+                                    .program
+                                    .schema
+                                    .get_type_name(fragment.type_condition),
+                            },
+                            spread.fragment.location,
+                        ));
+                        None
+                    }
+                    _ => match self
+                        .classify_inline_fragment_type(fragment.type_condition, parent_type)
+                    {
+                        MagicFragmentInlineFragmentArm::DropClientExtension => None,
+                        MagicFragmentInlineFragmentArm::Incompatible => {
+                            if drop_incompatible {
+                                return None;
+                            }
+                            self.errors.push(Diagnostic::error(
+                                ValidationMessage::ShadowReturnIncompatibleInlineFragmentType {
+                                    type_condition_name: self
+                                        .program
+                                        .schema
+                                        .get_type_name(fragment.type_condition),
+                                    type_name: self.program.schema.get_type_name(parent_type),
+                                },
+                                spread.fragment.location,
+                            ));
+                            None
+                        }
+                        MagicFragmentInlineFragmentArm::TransplantServer => {
+                            let selections = self.rebind_selections(
+                                &fragment.selections,
+                                fragment.type_condition,
+                                drop_incompatible,
+                            );
+                            // Prune when expanding a polymorphic body left this
+                            // concrete arm empty (its children all dropped) -- a
+                            // typed empty inline fragment is invalid and survives
+                            // `flatten`.
+                            if drop_incompatible && selections.is_empty() {
+                                return None;
+                            }
+                            Some(Selection::InlineFragment(Arc::new(InlineFragment {
+                                type_condition: Some(fragment.type_condition),
+                                directives: vec![],
+                                selections,
+                                spread_location: spread.fragment.location,
+                            })))
+                        }
+                    },
                 }
             }
         }
