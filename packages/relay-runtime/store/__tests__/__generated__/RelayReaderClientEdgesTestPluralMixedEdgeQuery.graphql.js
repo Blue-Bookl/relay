@@ -6,7 +6,7 @@
  *
  * @oncall relay
  *
- * @generated SignedSource<<4c06c3866a214491268669bfb4b96c39>>
+ * @generated SignedSource<<b283735bb449915a8881504516c2c4e3>>
  * @flow
  * @lightSyntaxTransform
  */
@@ -118,7 +118,9 @@ return {
             "path": "animals.__relay_model_instance"
           }
         },
-        "serverObjectOperations": null,
+        "serverObjectOperations": {
+          "Chicken": require('./ClientEdgeQuery_RelayReaderClientEdgesTestPluralMixedEdgeQuery_animals.graphql')
+        },
         "backingField": {
           "alias": null,
           "args": (v1/*:: as any*/),
@@ -202,7 +204,7 @@ return {
 })();
 
 if (__DEV__) {
-  (node/*:: as any*/).hash = "73a1a3f11dde27f38a148c686524e86a";
+  (node/*:: as any*/).hash = "c269150bc8b81e02f100dad3641bbd60";
 }
 
 module.exports = ((node/*:: as any*/)/*:: as ClientQuery<

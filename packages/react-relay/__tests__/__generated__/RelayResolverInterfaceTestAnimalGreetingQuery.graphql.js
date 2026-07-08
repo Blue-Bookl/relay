@@ -6,7 +6,7 @@
  *
  * @oncall relay
  *
- * @generated SignedSource<<d730c5680da541b5b9de9d85edd2a4ee>>
+ * @generated SignedSource<<27a473afaebf2b65395df2f58fcac4d3>>
  * @flow
  * @lightSyntaxTransform
  */
@@ -75,28 +75,14 @@ v1 = [
   }
 ],
 v2 = {
-  "kind": "InlineFragment",
-  "selections": [
-    {
-      "alias": null,
-      "args": null,
-      "kind": "ScalarField",
-      "name": "greeting",
-      "storageKey": null
-    }
-  ],
-  "type": "Chicken",
-  "abstractKey": null
-},
-v3 = {
   "alias": null,
   "args": null,
   "kind": "ScalarField",
   "name": "id",
   "storageKey": null
 },
-v4 = [
-  (v3/*:: as any*/)
+v3 = [
+  (v2/*:: as any*/)
 ];
 return {
   "fragment": {
@@ -138,7 +124,9 @@ return {
             "path": "animal.__relay_model_instance"
           }
         },
-        "serverObjectOperations": null,
+        "serverObjectOperations": {
+          "Chicken": require('./ClientEdgeQuery_RelayResolverInterfaceTestAnimalGreetingQuery_animal.graphql')
+        },
         "backingField": {
           "alias": null,
           "args": (v1/*:: as any*/),
@@ -156,7 +144,22 @@ return {
           "name": "animal",
           "plural": false,
           "selections": [
-            (v2/*:: as any*/),
+            {
+              "kind": "InlineFragment",
+              "selections": [
+                {
+                  "alias": null,
+                  "args": null,
+                  "fragment": null,
+                  "kind": "RelayResolver",
+                  "name": "greeting",
+                  "resolverModule": require('../../../relay-runtime/store/__tests__/resolvers/AnimalQueryResolvers').greeting,
+                  "path": "animal.greeting"
+                }
+              ],
+              "type": "Chicken",
+              "abstractKey": null
+            },
             {
               "kind": "InlineFragment",
               "selections": [
@@ -236,7 +239,21 @@ return {
               "name": "__typename",
               "storageKey": null
             },
-            (v2/*:: as any*/),
+            {
+              "kind": "InlineFragment",
+              "selections": [
+                {
+                  "name": "greeting",
+                  "args": null,
+                  "fragment": null,
+                  "kind": "RelayResolver",
+                  "storageKey": null,
+                  "isOutputType": true
+                }
+              ],
+              "type": "Chicken",
+              "abstractKey": null
+            },
             {
               "kind": "InlineFragment",
               "selections": [
@@ -251,7 +268,7 @@ return {
                         "args": null,
                         "fragment": {
                           "kind": "InlineFragment",
-                          "selections": (v4/*:: as any*/),
+                          "selections": (v3/*:: as any*/),
                           "type": "Cat",
                           "abstractKey": null
                         },
@@ -285,7 +302,7 @@ return {
                         "args": null,
                         "fragment": {
                           "kind": "InlineFragment",
-                          "selections": (v4/*:: as any*/),
+                          "selections": (v3/*:: as any*/),
                           "type": "Fish",
                           "abstractKey": null
                         },
@@ -305,7 +322,7 @@ return {
               "type": "Fish",
               "abstractKey": null
             },
-            (v3/*:: as any*/)
+            (v2/*:: as any*/)
           ],
           "storageKey": null
         }
@@ -324,7 +341,7 @@ return {
 })();
 
 if (__DEV__) {
-  (node/*:: as any*/).hash = "d35e1f7778da7bfc45d34903bd3ca96c";
+  (node/*:: as any*/).hash = "c574dd323e7ca1a8589783834b127925";
 }
 
 module.exports = ((node/*:: as any*/)/*:: as ClientQuery<

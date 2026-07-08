@@ -535,7 +535,7 @@ describe('RelayReader Client Edges behavior', () => {
       query RelayReaderClientEdgesTestPluralMixedEdgeQuery(
         $requests: [AnimalRequest!]!
       ) {
-        animals(requests: $requests) {
+        animals(requests: $requests) @waterfall {
           ... on Chicken {
             legs
           }
