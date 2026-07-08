@@ -1,0 +1,63 @@
+==================================== INPUT ====================================
+//- UserCombinedPage.js
+// RED: a consumer fragment spread whose type condition is an ABSTRACT type
+// (interface `IPage`) on a magic-fragment field is rejected. Only
+// concrete-typed consumer spreads are supported; abstract spreads are not.
+/**
+ * @relayField User.combined_page: IPage
+ * @rootFragment UserCombinedPageResolverFragment
+ * @returnFragment UserCombinedPageReturnFragment
+ */
+graphql`fragment UserCombinedPageResolverFragment on User {
+  page {
+    ...UserCombinedPageReturnFragment
+  }
+}`
+
+//- IPageFields.js
+graphql`fragment IPageFields on IPage {
+  title
+}`
+
+//- UserConsumer.js
+graphql`query UserConsumerQuery {
+  me {
+    combined_page {
+      ...IPageFields
+    }
+  }
+}`
+
+//- relay.config.json
+{
+  "language": "flow",
+  "jsModuleFormat": "haste",
+  "schema": "schema.graphql",
+  "schemaExtensions": ["schema-extensions"],
+  "featureFlags": {
+    "enable_shadow_resolvers": { "kind": "enabled" },
+    "relay_resolver_enable_interface_output_type": { "kind": "enabled" }
+  }
+}
+
+//- schema.graphql
+type Query { me: User, node(id: ID!): Node }
+interface Node { id: ID! }
+type User { name: String, page: Page }
+type Page implements Node { id: ID!, title: String }
+
+//- schema-extensions/extension.graphql
+interface IPage implements Node {
+  id: ID!
+  title: String
+}
+
+extend type Page implements IPage
+==================================== OUTPUT ===================================
+✖︎ Fragment spread `IPageFields` in selections on a shadow resolver field has the abstract (interface or union) type condition `IPage`. Only concrete-typed consumer spreads are supported for now. Use a fragment on a concrete type, or inline the selection.
+
+  UserConsumer.js:4:10
+    3 │     combined_page {
+    4 │       ...IPageFields
+      │          ^^^^^^^^^^^
+    5 │     }

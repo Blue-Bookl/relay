@@ -38,6 +38,7 @@ use super::ResolversPipeline;
 use super::ShadowReturnMarker;
 use super::ValidationMessage;
 use crate::ClientEdgeMetadata;
+use crate::NO_INLINE_DIRECTIVE_NAME;
 
 /// Convert fields with attached Relay Resolver metadata into the fragment
 /// spread of their data dependencies (root fragment). Their
@@ -473,11 +474,96 @@ impl<'program> RelayResolverSpreadTransform<'program> {
                 })))
             }
             Selection::FragmentSpread(spread) => {
-                self.errors.push(Diagnostic::error(
-                    ValidationMessage::ShadowReturnUnsupportedFragmentSpread,
-                    spread.fragment.location,
-                ));
-                None
+                // A consumer fragment spread is INLINE-EXPANDED into the
+                // transplanted server selection (so its fields are fetched in
+                // the main operation), while the reader pipeline keeps the spread
+                // verbatim (so masking / `$fragmentSpreads` / the child
+                // `useFragment` are unaffected -- this transform's reader pass
+                // never reaches here). Only concrete-typed spreads are
+                // supported; the gates below reject cases that would miscompile.
+                let Some(fragment) = self.program.fragment(spread.fragment.item) else {
+                    // The fragment is guaranteed present once validation has run;
+                    // a missing one here is a compiler bug. Drop the spread rather
+                    // than panicking so a malformed program degrades gracefully.
+                    return None;
+                };
+
+                // The inlined operation copy and the kept reader spread resolve
+                // variables at different pipeline stages (`apply_fragment_arguments`
+                // runs after this transform), so a parameterized spread can
+                // silently miscompile. Reject any `@arguments` or argument
+                // definitions.
+                if !spread.arguments.is_empty() || !fragment.variable_definitions.is_empty() {
+                    self.errors.push(Diagnostic::error(
+                        ValidationMessage::ShadowReturnFragmentSpreadArgumentsUnsupported {
+                            fragment_name: spread.fragment.item.0,
+                        },
+                        spread.fragment.location,
+                    ));
+                    return None;
+                }
+
+                // A `@no_inline` fragment is promoted to its own normalization
+                // operation and never inlined, so its fields would not reach the
+                // transplanted server selection.
+                if fragment
+                    .directives
+                    .named(*NO_INLINE_DIRECTIVE_NAME)
+                    .is_some()
+                {
+                    self.errors.push(Diagnostic::error(
+                        ValidationMessage::ShadowReturnFragmentSpreadNoInlineUnsupported {
+                            fragment_name: spread.fragment.item.0,
+                        },
+                        spread.fragment.location,
+                    ));
+                    return None;
+                }
+
+                // Abstract spreads are not yet supported; for now only concrete
+                // type conditions are supported.
+                if fragment.type_condition.is_abstract_type() {
+                    self.errors.push(Diagnostic::error(
+                        ValidationMessage::ShadowReturnFragmentSpreadAbstractTypeUnsupported {
+                            fragment_name: spread.fragment.item.0,
+                            type_condition_name: self
+                                .program
+                                .schema
+                                .get_type_name(fragment.type_condition),
+                        },
+                        spread.fragment.location,
+                    ));
+                    return None;
+                }
+
+                // Concrete type condition: classify and route exactly like the
+                // `InlineFragment` arm above.
+                match self.classify_inline_fragment_type(fragment.type_condition, parent_type) {
+                    MagicFragmentInlineFragmentArm::DropClientExtension => None,
+                    MagicFragmentInlineFragmentArm::Incompatible => {
+                        self.errors.push(Diagnostic::error(
+                            ValidationMessage::ShadowReturnIncompatibleInlineFragmentType {
+                                type_condition_name: self
+                                    .program
+                                    .schema
+                                    .get_type_name(fragment.type_condition),
+                                type_name: self.program.schema.get_type_name(parent_type),
+                            },
+                            spread.fragment.location,
+                        ));
+                        None
+                    }
+                    MagicFragmentInlineFragmentArm::TransplantServer => {
+                        let selections =
+                            self.rebind_selections(&fragment.selections, fragment.type_condition);
+                        Some(Selection::InlineFragment(Arc::new(InlineFragment {
+                            type_condition: Some(fragment.type_condition),
+                            directives: vec![],
+                            selections,
+                            spread_location: spread.fragment.location,
+                        })))
+                    }
+                }
             }
         }
     }

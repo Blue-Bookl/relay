@@ -266,9 +266,22 @@ pub enum ValidationMessage {
     },
 
     #[error(
-        "Fragment spreads in selections on a shadow resolver field are not yet supported. Inline the selection instead."
+        "Fragment spread `{fragment_name}` in selections on a shadow resolver field cannot take `@arguments`, and its fragment cannot declare argument definitions. The spread is inlined into the main operation while the reader keeps the spread verbatim; because these resolve variables at different pipeline stages, a parameterized spread can silently miscompile. Remove the fragment's arguments, or inline the selection."
     )]
-    ShadowReturnUnsupportedFragmentSpread,
+    ShadowReturnFragmentSpreadArgumentsUnsupported { fragment_name: StringKey },
+
+    #[error(
+        "Fragment spread `{fragment_name}` in selections on a shadow resolver field cannot be a `@no_inline` fragment. The spread's fields must be inlined into the main operation. Remove `@no_inline` from the fragment, or inline the selection."
+    )]
+    ShadowReturnFragmentSpreadNoInlineUnsupported { fragment_name: StringKey },
+
+    #[error(
+        "Fragment spread `{fragment_name}` in selections on a shadow resolver field has the abstract (interface or union) type condition `{type_condition_name}`. Only concrete-typed consumer spreads are supported for now. Use a fragment on a concrete type, or inline the selection."
+    )]
+    ShadowReturnFragmentSpreadAbstractTypeUnsupported {
+        fragment_name: StringKey,
+        type_condition_name: StringKey,
+    },
 
     #[error(
         "The inline fragment type condition '{type_condition_name}' cannot be transplanted onto the shadowed server type '{type_name}'. Shadow resolver selections are fetched from the shadowed server field, so a server type condition must overlap that type. (Client-extension type conditions are served separately by the model-resolver edge.)"
