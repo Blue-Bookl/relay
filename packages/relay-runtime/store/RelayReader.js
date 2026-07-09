@@ -1147,6 +1147,10 @@ class RelayReader {
       } else {
         // The normalization process in LiveResolverCache should take care of
         // generating the correct ID.
+        // (The read-in-place inline arms (`ServerWeak`/`AbstractInline`) are
+        // singular-only at the compiler, so this plural branch never carries a
+        // resolver-returned `__id` pointer and keeps `extractIdFromResponse`
+        // unchanged.)
         storeIDs = clientEdgeResolverResponse.map(obj =>
           extractIdFromResponse(obj, backingField.path, this._owner.identifier),
         );
@@ -1165,11 +1169,25 @@ class RelayReader {
       data[fieldName] = edgeValues;
       return edgeValues;
     } else {
-      const id = extractIdFromResponse(
-        clientEdgeResolverResponse,
-        backingField.path,
-        this._owner.identifier,
-      );
+      // The resolver-returned `__id` store key is preferred ONLY for the
+      // read-in-place inline arms (`ServerWeak`/`AbstractInline`), whose value
+      // is normalized in place by the magic-fragment transplant and surfaced via
+      // `__id`. Every other edge — `@edgeTo`/CSE server objects and the
+      // `OutputType`/`WeakModel` inline arms — keeps `extractIdFromResponse`
+      // exactly, so this change alters no existing client-edge store key.
+      const inlineKind = backingField.normalizationInfo?.kind;
+      const id =
+        inlineKind === 'ServerWeak' || inlineKind === 'AbstractInline'
+          ? extractStoreIDFromResponse(
+              clientEdgeResolverResponse,
+              backingField.path,
+              this._owner.identifier,
+            )
+          : extractIdFromResponse(
+              clientEdgeResolverResponse,
+              backingField.path,
+              this._owner.identifier,
+            );
       let storeID: DataID;
       const concreteType =
         field.concreteType ?? clientEdgeResolverResponse.__typename;
@@ -1226,8 +1244,37 @@ class RelayReader {
             traversalPathSegment = null;
           }
         } else {
-          // The normalization process in LiveResolverCache should take care of generating the correct ID.
+          // Inline arm. Shapes that share this branch:
+          //  * `OutputType`/`WeakModel`: LiveResolverCache normalized the resolver
+          //    value into a record under `id` (the resolver-returned id).
+          //  * `ServerWeak` (shadow server-value): NO second
+          //    normalization happened. `id` is the injected `__id` (the DataID of
+          //    the transplanted `client:<parentid>:<field>` record), so `storeID`
+          //    addresses the record the main operation already normalized in
+          //    place. Mis-wiring this `__id` would silently read a wrong/empty
+          //    record (a prod-silent miscompile), so in dev we assert the record
+          //    exists before reading its selections.
+          //  * `AbstractInline` (interface/union): dispatched per concrete
+          //    `__typename` via `inlineKinds` — a `ServerWeak` member behaves like
+          //    the scalar `ServerWeak` arm, a `WeakModel` member like `WeakModel`.
           storeID = id;
+          const inlineNormalizationInfo = field.backingField.normalizationInfo;
+          const effectiveKind =
+            inlineNormalizationInfo?.kind === 'AbstractInline'
+              ? inlineNormalizationInfo.inlineKinds[concreteType]
+              : inlineNormalizationInfo?.kind;
+          if (__DEV__ && effectiveKind === 'ServerWeak') {
+            invariant(
+              this._recordSource.get(storeID) != null,
+              'RelayReader: Expected the in-place shadow record `%s` (read off ' +
+                'the injected `__id` for field at `%s` in `%s`) to exist in the ' +
+                'store. A missing record means the magic-fragment transplant did ' +
+                'not normalize the shadowed server value at this DataID.',
+              storeID,
+              backingField.path,
+              this._owner.identifier,
+            );
+          }
           traversalPathSegment = null;
         }
       } else {
@@ -1912,6 +1959,31 @@ function extractIdFromResponse(
     path,
     owner,
   );
+}
+
+// The DataID (store key) for a read-in-place inline arm. Called ONLY for the
+// `ServerWeak`/`AbstractInline` kinds (the caller gates on kind so no other edge
+// reaches here).
+//
+// A `ServerWeak` member's resolver surfaces the shadowed record's `__id` (its
+// exact DataID, e.g. `client:<parentid>:<field>`), so we read off that directly
+// — a non-Node server value type has no `id` field to guess from. A `WeakModel`
+// member of an `AbstractInline` return carries no `__id`, so it falls back to
+// `extractIdFromResponse` (the resolver-returned id), exactly as a scalar
+// `WeakModel` arm does.
+function extractStoreIDFromResponse(
+  individualResponse: unknown,
+  path: string,
+  owner: string,
+): string {
+  if (
+    typeof individualResponse === 'object' &&
+    individualResponse != null &&
+    typeof individualResponse.__id === 'string'
+  ) {
+    return individualResponse.__id;
+  }
+  return extractIdFromResponse(individualResponse, path, owner);
 }
 
 module.exports = {read};

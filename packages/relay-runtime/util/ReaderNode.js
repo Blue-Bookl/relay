@@ -259,7 +259,9 @@ export type ResolverModule = ResolverFunction | {default: ResolverFunction};
 
 export type ResolverNormalizationInfo =
   | ResolverOutputTypeNormalizationInfo
-  | ResolverWeakModelNormalizationInfo;
+  | ResolverWeakModelNormalizationInfo
+  | ResolverServerWeakNormalizationInfo
+  | ResolverAbstractInlineNormalizationInfo;
 
 export type ResolverOutputTypeNormalizationInfo = {
   readonly kind: 'OutputType',
@@ -272,6 +274,38 @@ export type ResolverWeakModelNormalizationInfo = {
   readonly kind: 'WeakModel',
   readonly concreteType: string | null,
   readonly plural: boolean,
+};
+
+// A shadow (`@returnFragment`) resolver whose return type is a non-Node SERVER
+// VALUE type is read INLINE IN PLACE off the transplanted
+// `client:<parentid>:<field>` record via the resolver-returned `__id`.
+// Unlike `OutputType` it carries NO `normalizationNode`: the value is already
+// normalized once by the magic-fragment transplant in the main operation, so
+// `LiveResolverCache` MUST NOT re-normalize a second copy. The reader takes the
+// same inline branch (no `ensureClientRecord`, no refetch) but sources the
+// storeID from the `__id`.
+export type ResolverServerWeakNormalizationInfo = {
+  readonly kind: 'ServerWeak',
+  readonly concreteType: string | null,
+  readonly plural: boolean,
+};
+
+// An abstract (interface/union) `@returnFragment` shadow return whose members are
+// read INLINE IN PLACE, dispatched per concrete `__typename`. The abstract type
+// has no object id, so `concreteType` is always `null` and each implementor's
+// inline flavor is listed in `inlineKinds`: a `WeakModel` member is normalized
+// into a `__relay_model_instance` record (its `{__typename, __relay_model_instance}`
+// wrapper unwrapped), a `ServerWeak` member is read off the transplanted `__id`
+// (no second normalization). Like the concrete weak/value arms it carries NO
+// `normalizationNode`. Both `LiveResolverCache` (write) and `RelayReader` (read)
+// resolve the effective per-member kind via `inlineKinds[getConcreteTypename(value)]`.
+export type ResolverAbstractInlineNormalizationInfo = {
+  readonly kind: 'AbstractInline',
+  readonly concreteType: string | null,
+  readonly plural: boolean,
+  readonly inlineKinds: {
+    readonly [typename: string]: 'WeakModel' | 'ServerWeak',
+  },
 };
 
 export type ReaderRelayResolver = {
