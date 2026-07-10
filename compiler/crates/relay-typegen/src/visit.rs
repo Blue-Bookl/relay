@@ -46,7 +46,11 @@ use relay_config::TypegenLanguage;
 use relay_schema::CUSTOM_SCALAR_DIRECTIVE_NAME;
 use relay_schema::EXPORT_NAME_CUSTOM_SCALAR_ARGUMENT_NAME;
 use relay_schema::PATH_CUSTOM_SCALAR_ARGUMENT_NAME;
+use relay_schema::definitions::AbstractInlineKind;
 use relay_schema::definitions::ResolverType;
+use relay_schema::definitions::abstract_shadow_return_has_server_implementor;
+use relay_schema::definitions::abstract_shadow_return_inline_kinds_by_typename;
+use relay_schema::definitions::abstract_shadow_return_is_mixed_inline;
 use relay_schema::definitions::is_server_weak_shadow_return;
 use relay_transforms::ASSIGNABLE_DIRECTIVE_FOR_TYPEGEN;
 use relay_transforms::CATCH_DIRECTIVE_NAME;
@@ -408,6 +412,50 @@ fn generate_resolver_type(
                     typegen_context.schema,
                     runtime_imports,
                 )
+            } else if abstract_shadow_return_is_mixed_inline(
+                typegen_context.schema,
+                normalization_info.inner_type,
+                typegen_context
+                    .project_config
+                    .schema_config
+                    .node_interface_id_field,
+            ) {
+                // MIXED abstract interface shadow return: implemented by BOTH
+                // an `@weak` model AND a non-Node server value type. A single
+                // `{__typename, __id}` identity would leave the weak arm with no
+                // model value to normalize (rendering blank), so emit a
+                // DISCRIMINATED UNION: the weak member carries its
+                // `__relay_model_instance` (the fat value the `WeakModel` normalizer
+                // stores and the weak field resolvers read), the value member
+                // carries `{__typename, __id}` (read in place off the transplanted
+                // record). The backing field's `inlineKinds` map tells the runtime
+                // which arm is which. This must be checked BEFORE
+                // `abstract_shadow_return_has_server_implementor` (a mixed return's
+                // value member is a server type, so that predicate is also true).
+                create_abstract_mixed_return_type_ast(
+                    &normalization_info.inner_type,
+                    typegen_context,
+                    encountered_fragments,
+                    runtime_imports,
+                )
+            } else if abstract_shadow_return_has_server_implementor(
+                typegen_context.schema,
+                normalization_info.inner_type,
+                typegen_context
+                    .project_config
+                    .schema_config
+                    .node_interface_id_field,
+                resolver_metadata.return_fragment.is_some(),
+            ) {
+                // Abstract interface/union shadow return with a server
+                // (Node or value) implementor. Like the read-in-place case the
+                // resolver returns the per-`__typename` IDENTITY (`{__typename,
+                // __id}`) and the runtime dispatches per type — inline read for the
+                // weak/value member, refetch for the Node. The abstract type has
+                // many possible concrete `__typename`s, so `__typename` is `string`
+                // (not a single literal). No `$normalization` import: the
+                // nested-objects pass skips generating one for such a return.
+                create_abstract_identity_return_type_ast(runtime_imports)
             } else {
                 imported_raw_response_types.0.insert(
                     normalization_info.normalization_operation.item.0,
@@ -2997,6 +3045,119 @@ fn create_server_weak_return_type_ast(
             optional: false,
         }),
     ]))
+}
+
+/// The resolver return type for a MIXED interface/union shadow return:
+/// `{ +__typename: string, +__id: DataID }`. Mirrors
+/// `create_server_weak_return_type_ast` but `__typename` is `string` rather than
+/// a single concrete literal — a mixed abstract return has many possible concrete
+/// implementor `__typename`s, resolved per read. The runtime reads the inline
+/// (weak/value) member in place off `__id` and refetches the Node member via
+/// `serverObjectOperations`. Like read-in-place it emits NO `$normalization`
+/// import (no normalization artifact is generated for a mixed return).
+fn create_abstract_identity_return_type_ast(runtime_imports: &mut RuntimeImports) -> AST {
+    // Mark that the DataID type is used, and must be imported.
+    runtime_imports.data_id_type = true;
+
+    AST::ExactObject(ExactObject::new(vec![
+        Prop::KeyValuePair(KeyValuePairProp {
+            key: *KEY_TYPENAME,
+            value: AST::String,
+            read_only: true,
+            optional: false,
+        }),
+        Prop::KeyValuePair(KeyValuePairProp {
+            key: *KEY_CLIENTID,
+            value: AST::RawType(*KEY_DATA_ID),
+            read_only: true,
+            optional: false,
+        }),
+    ]))
+}
+
+/// The resolver return type for a MIXED interface shadow return: an
+/// interface implemented by BOTH an `@weak` model AND a non-Node server value
+/// type. A single `{__typename, __id}` identity is insufficient — the weak arm
+/// needs its `__relay_model_instance` value (which `LiveResolverCache` stores and
+/// the weak field resolvers read), while the value arm needs `{__typename, __id}`
+/// to be read in place. So emit a DISCRIMINATED UNION, one object per implementor:
+/// a weak member as `{ +__typename: "<W>", +__relay_model_instance: <W> }`
+/// (referencing the per-object `<W>____relay_model_instance` fragment, mirroring
+/// the weak `$normalization` shape), and a value member as `{ +__typename: "<V>",
+/// +__id: DataID }` (mirroring `create_server_weak_return_type_ast`). The backing
+/// field's `inlineKinds` map tells the runtime which arm is which.
+fn create_abstract_mixed_return_type_ast(
+    inner_type: &Type,
+    typegen_context: &TypegenContext<'_>,
+    encountered_fragments: &mut EncounteredFragments,
+    runtime_imports: &mut RuntimeImports,
+) -> AST {
+    // Mark that the DataID type is used, and must be imported.
+    runtime_imports.data_id_type = true;
+
+    let id_field_name = typegen_context
+        .project_config
+        .schema_config
+        .node_interface_id_field;
+    let kinds = abstract_shadow_return_inline_kinds_by_typename(
+        typegen_context.schema,
+        *inner_type,
+        id_field_name,
+    )
+    .unwrap_or_default();
+
+    let members: Vec<AST> = kinds
+        .into_iter()
+        .map(|(type_name, kind)| match kind {
+            AbstractInlineKind::WeakModel => {
+                let fragment_name = typegen_context
+                    .project_config
+                    .name
+                    .generate_name_for_object_and_field(
+                        type_name,
+                        *RELAY_RESOLVER_MODEL_INSTANCE_FIELD,
+                    )
+                    .intern();
+                add_fragment_name_to_encountered_fragments(
+                    FragmentDefinitionName(fragment_name),
+                    encountered_fragments,
+                );
+                AST::ExactObject(ExactObject::new(vec![
+                    Prop::KeyValuePair(KeyValuePairProp {
+                        key: *KEY_TYPENAME,
+                        value: AST::StringLiteral(StringLiteral(type_name)),
+                        read_only: true,
+                        optional: false,
+                    }),
+                    Prop::KeyValuePair(KeyValuePairProp {
+                        key: *RELAY_RESOLVER_MODEL_INSTANCE_FIELD,
+                        value: AST::PropertyType {
+                            type_: get_fragment_data_type(fragment_name),
+                            property_name: *RELAY_RESOLVER_MODEL_INSTANCE_FIELD,
+                        },
+                        read_only: true,
+                        optional: false,
+                    }),
+                ]))
+            }
+            AbstractInlineKind::ServerWeak => AST::ExactObject(ExactObject::new(vec![
+                Prop::KeyValuePair(KeyValuePairProp {
+                    key: *KEY_TYPENAME,
+                    value: AST::StringLiteral(StringLiteral(type_name)),
+                    read_only: true,
+                    optional: false,
+                }),
+                Prop::KeyValuePair(KeyValuePairProp {
+                    key: *KEY_CLIENTID,
+                    value: AST::RawType(*KEY_DATA_ID),
+                    read_only: true,
+                    optional: false,
+                }),
+            ])),
+        })
+        .collect();
+
+    AST::Union(SortedASTList::new(members))
 }
 
 fn expect_scalar_type(

@@ -9,6 +9,7 @@ use common::NamedItem;
 use docblock_shared::RELAY_RESOLVER_MODEL_DIRECTIVE_NAME;
 use docblock_shared::RELAY_RESOLVER_MODEL_INSTANCE_FIELD;
 use docblock_shared::RELAY_RESOLVER_WEAK_OBJECT_DIRECTIVE;
+use intern::Lookup;
 use intern::string_key::StringKey;
 use schema::FieldID;
 use schema::ObjectID;
@@ -232,6 +233,63 @@ pub fn abstract_shadow_return_inline_kind(
     } else {
         None
     }
+}
+
+/// The PER-`__typename` inline `normalizationInfo.kind` for an abstract
+/// (interface/union) shadow return with inline implementors. Unlike
+/// `abstract_shadow_return_inline_kind` (which COLLAPSES to a single kind with
+/// weak precedence), this returns each inline implementor's OWN kind —
+/// `WeakModel` for an `@weak` model, `ServerWeak` for a non-Node server value
+/// type — so an interface with weak and/or value members can dispatch per
+/// concrete `__typename` at runtime via the emitted `inlineKinds` map. Returns
+/// `None` when there is no inline implementor. Strong Node implementors are
+/// omitted (they are gated out of mixed inline returns by
+/// `MagicFragmentMixedInlineAndRefetchableUnsupported`). The result is sorted by
+/// type name for deterministic codegen.
+pub fn abstract_shadow_return_inline_kinds_by_typename(
+    schema: &SDLSchema,
+    type_: Type,
+    id_field_name: StringKey,
+) -> Option<Vec<(StringKey, AbstractInlineKind)>> {
+    let members = abstract_type_implementors(schema, type_)?;
+    let mut kinds: Vec<(StringKey, AbstractInlineKind)> = Vec::new();
+    for object_id in &members {
+        let member = Type::Object(*object_id);
+        let kind = if weak_object_instance_field(schema, member).is_some() {
+            AbstractInlineKind::WeakModel
+        } else if is_server_value_object(schema, member, id_field_name) {
+            AbstractInlineKind::ServerWeak
+        } else {
+            continue;
+        };
+        kinds.push((schema.get_type_name(member), kind));
+    }
+    if kinds.is_empty() {
+        return None;
+    }
+    kinds.sort_by(|a, b| a.0.lookup().cmp(b.0.lookup()));
+    Some(kinds)
+}
+
+/// Returns `true` when an abstract shadow return mixes BOTH an `@weak` model
+/// implementor AND a non-Node server value implementor — the case whose resolver
+/// return type is a per-`__typename` discriminated union (`relay-typegen`) and
+/// whose backing field carries a mixed `inlineKinds` map.
+pub fn abstract_shadow_return_is_mixed_inline(
+    schema: &SDLSchema,
+    type_: Type,
+    id_field_name: StringKey,
+) -> bool {
+    let Some(kinds) = abstract_shadow_return_inline_kinds_by_typename(schema, type_, id_field_name)
+    else {
+        return false;
+    };
+    kinds
+        .iter()
+        .any(|(_, k)| *k == AbstractInlineKind::WeakModel)
+        && kinds
+            .iter()
+            .any(|(_, k)| *k == AbstractInlineKind::ServerWeak)
 }
 
 /// Which inline `normalizationInfo.kind` a mixed/abstract shadow return's backing

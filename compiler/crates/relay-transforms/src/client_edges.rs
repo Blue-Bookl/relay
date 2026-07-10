@@ -45,6 +45,8 @@ use intern::string_key::StringKey;
 use intern::string_key::StringKeyMap;
 use relay_config::ProjectConfig;
 use relay_schema::definitions::ResolverType;
+use relay_schema::definitions::is_server_value_object;
+use relay_schema::definitions::weak_object_instance_field;
 use schema::DirectiveValue;
 use schema::FieldID;
 use schema::ObjectID;
@@ -729,21 +731,49 @@ impl<'program, 'pc> ClientEdgesTransform<'program, 'pc> {
     ) -> Option<ClientEdgeMetadataDirective> {
         let mut model_resolvers: Vec<ClientEdgeModelResolver> = Vec::new();
         let mut server_type_object_ids: Vec<ObjectID> = Vec::new();
+        let mut has_inline_member = false;
 
+        let id_field_name = self.project_config.schema_config.node_interface_id_field;
         for object_id in members {
+            let member = Type::Object(*object_id);
+            let schema = self.program.schema.as_ref();
+
+            // Per-`__typename` classification. A weak `@weak` model or a
+            // non-Node server VALUE implementor is read INLINE (off
+            // `__relay_model_instance` / the transplanted `client:<parentid>:<field>`
+            // record via `__id`) — it has no DataID pointer and no separate record
+            // to refetch. Such a member must reach NEITHER `model_resolvers` (it has
+            // no model resolver; `@weak` was previously silent-dropped) NOR
+            // `server_type_object_ids` (a value type cannot be refetched via
+            // `node(id:)`, so an `@waterfall` mixed interface must not attempt one on
+            // it — R5). The reader serves it through the backing field's
+            // `normalizationInfo` inline branch (set by `field_transform` /
+            // `build_ast`) plus the per-concrete inline fragment that
+            // `relay_resolvers_abstract_types` expanded; the per-member `@waterfall`
+            // strip in `project_interface_selections_to_concrete` already removes
+            // `@waterfall` from a non-refetchable inline member's selections. So we
+            // simply skip it here.
+            let is_inline_member = weak_object_instance_field(schema, member).is_some()
+                || is_server_value_object(schema, member, id_field_name);
+            if is_inline_member {
+                has_inline_member = true;
+                continue;
+            }
+
             let is_server_type = !self
                 .program
                 .schema
                 .is_extension_type(Type::Object(*object_id));
             if is_server_type {
-                // Collected unconditionally, but only consumed under
-                // `GenerateWaterfallOperations`. In `SuppressForMagicFragmentTransplant`
-                // mode these ids are gathered-but-unused: the server member's
-                // selections are transplanted onto the shadowed field in the main
-                // operation, so no per-server refetch query is generated.
+                // Strong (Node) server implementor. Collected unconditionally, but
+                // only consumed under `GenerateWaterfallOperations`. In
+                // `SuppressForMagicFragmentTransplant` mode these ids are
+                // gathered-but-unused: the server member's selections are
+                // transplanted onto the shadowed field in the main operation, so no
+                // per-server refetch query is generated.
                 server_type_object_ids.push(*object_id);
             } else {
-                // Client type: try to get a model resolver.
+                // Client model type: try to get a model resolver.
                 let model_resolver = self.get_client_edge_model_resolver_for_object(*object_id);
                 match model_resolver {
                     Some(resolver) => {
@@ -757,6 +787,25 @@ impl<'program, 'pc> ClientEdgesTransform<'program, 'pc> {
                     }
                 }
             }
+        }
+
+        // Gate: a mixed magic-fragment return that has BOTH an inline
+        // (weak / non-Node value) implementor AND a strong refetchable server-object
+        // (Node) implementor is not yet runtime-correct. The inline arm reads in
+        // place off `normalizationInfo` while the Node arm needs a `node(id:)`
+        // refetch — a single backing-field `normalizationInfo.kind` cannot express
+        // per-`__typename` behavior, so the Node member would be mis-normalized as an
+        // inline value. Reject up front; full per-`__typename` dispatch is not yet
+        // supported. Pure-inline (no strong-Node) and pure-strong (no
+        // inline) returns are unaffected.
+        if has_inline_member && !server_type_object_ids.is_empty() {
+            self.errors.push(Diagnostic::error(
+                ValidationMessage::MagicFragmentMixedInlineAndRefetchableUnsupported {
+                    interface_name: abstract_type_name,
+                },
+                field.definition.location,
+            ));
+            return None;
         }
 
         model_resolvers.sort();

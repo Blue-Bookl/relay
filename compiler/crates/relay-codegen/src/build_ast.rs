@@ -1817,7 +1817,57 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
                 relay_resolver_metadata.return_fragment.is_some(),
             );
 
-            let normalization_info = if is_server_weak {
+            // An INTERFACE/UNION shadow return with inline (weak/value)
+            // implementors. The abstract type has no object id, so each
+            // implementor's kind is emitted per `__typename` in an `inlineKinds`
+            // map (`WeakModel` for an `@weak` member, `ServerWeak` for a non-Node
+            // server-value member) and the runtime dispatches per concrete
+            // `__typename` at read time. Like the concrete weak/value arms it
+            // carries NO `normalizationNode` (no abstract normalization operation
+            // exists), so it never falls into the `OutputType` branch below (which
+            // would emit a dangling `$normalization` import). `concrete_type` is
+            // `null` (abstract). Every abstract inline return — pure-weak,
+            // pure-value, AND mixed — takes this one first-class `AbstractInline`
+            // shape, so the concrete `WeakModel`/`ServerWeak` arms below stay
+            // untouched (the concrete `@weak` path stores its model as-is, no
+            // per-`__typename` unwrap overload).
+            let abstract_inline_kinds = if relay_resolver_metadata.return_fragment.is_some()
+                && normalization_info.inner_type.is_abstract_type()
+            {
+                relay_schema::definitions::abstract_shadow_return_inline_kinds_by_typename(
+                    self.schema,
+                    normalization_info.inner_type,
+                    self.project_config.schema_config.node_interface_id_field,
+                )
+            } else {
+                None
+            };
+
+            let normalization_info = if let Some(kinds_by_typename) = abstract_inline_kinds {
+                let inline_kind_entries: Vec<ObjectEntry> = kinds_by_typename
+                    .iter()
+                    .map(|(type_name, kind)| {
+                        let kind_constant = match kind {
+                            relay_schema::definitions::AbstractInlineKind::WeakModel => {
+                                CODEGEN_CONSTANTS.weak_model
+                            }
+                            relay_schema::definitions::AbstractInlineKind::ServerWeak => {
+                                CODEGEN_CONSTANTS.server_weak
+                            }
+                        };
+                        ObjectEntry {
+                            key: *type_name,
+                            value: Primitive::String(kind_constant),
+                        }
+                    })
+                    .collect();
+                object! {
+                    kind: Primitive::String(CODEGEN_CONSTANTS.abstract_inline),
+                    concrete_type: concrete_type,
+                    plural: Primitive::Bool(normalization_info.plural),
+                    inline_kinds: Primitive::Key(self.object(inline_kind_entries)),
+                }
+            } else if is_server_weak {
                 object! {
                     kind: Primitive::String(CODEGEN_CONSTANTS.server_weak),
                     concrete_type: concrete_type,

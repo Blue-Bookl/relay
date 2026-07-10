@@ -43,6 +43,7 @@ use graphql_syntax::Value;
 use intern::Lookup;
 use intern::string_key::Intern;
 use intern::string_key::StringKey;
+use relay_schema::definitions::abstract_shadow_return_inline_kind;
 use relay_schema::definitions::is_server_value_object;
 use relay_transforms::ValidationMessage;
 use relay_transforms::get_resolver_fragment_dependency_name;
@@ -144,10 +145,19 @@ fn collect_shadow_return_directive_errors_in_selections(
 /// placeholder unconverted (and failing later with an undefined-fragment error).
 ///
 /// The injected identity field is the DataID/store key the resolver edge reads
-/// off of: `__id` (`schema.clientid_field()`) for a non-Node SERVER VALUE return
-/// (read in place — a value type has no `id`), and `id` (the
-/// `id_field_name`) for the strong/`EdgeTo` pointer arm and the client-`@weak`
-/// arm.
+/// off of: `__id` (`schema.clientid_field()`, the universal DataID) for every
+/// all-inline return — a non-Node SERVER VALUE (read in place) or an
+/// abstract (interface/union) return with ANY inline implementor (`@weak` and/or
+/// server VALUE) — and `id` (the `id_field_name`) only for the
+/// strong/`EdgeTo` pointer arm (the `node(id:)` refetch arm) and the concrete
+/// client-`@weak` arm (whose leaf is a Node, injection handled elsewhere).
+///
+/// An all-inline abstract return never refetches (the
+/// `MagicFragmentMixedInlineAndRefetchableUnsupported` gate guarantees no
+/// strong-Node member), so `id` is never needed; `__id` is valid on weak, value,
+/// and Node leaves alike. An inline implementor's fields are read off the
+/// transplanted record (value) or the model instance (`@weak`); the injected
+/// `__id` is the store key for that read.
 fn shadow_return_fragments_by_root_fragment(
     schema: &SDLSchema,
     id_field_name: StringKey,
@@ -161,12 +171,24 @@ fn shadow_return_fragments_by_root_fragment(
         if let Some(root_fragment) = get_resolver_fragment_dependency_name(field)
             && let Some(return_fragment) = get_resolver_return_fragment_name(field)
         {
-            let identity_field =
-                if is_server_value_object(schema, field.type_.inner(), id_field_name) {
-                    clientid_field_name
-                } else {
-                    id_field_name
-                };
+            let inner = field.type_.inner();
+            // Inject `__id` (the universal DataID) for ANY all-inline return: a
+            // concrete server VALUE type, OR an abstract return with any inline
+            // (`@weak` and/or non-Node value) implementor. `__id` is selectable on
+            // weak, value, and Node leaves alike, and an all-inline return never
+            // refetches, so `id` is unnecessary there. (The
+            // `MagicFragmentMixedInlineAndRefetchableUnsupported` gate guarantees an
+            // abstract return with an inline implementor has no strong-Node member,
+            // so an `id`-bearing leaf and an inline implementor never coexist.) Only
+            // the strong/Node pointer arm — which refetches via `node(id:)` and has
+            // no inline implementor — injects `id`.
+            let inject_clientid = is_server_value_object(schema, inner, id_field_name)
+                || abstract_shadow_return_inline_kind(schema, inner, id_field_name).is_some();
+            let identity_field = if inject_clientid {
+                clientid_field_name
+            } else {
+                id_field_name
+            };
             by_root
                 .entry(root_fragment)
                 .or_default()

@@ -248,6 +248,28 @@ impl<'program> RelayResolverFieldTransform<'program> {
                             resolver_info.return_fragment.is_some(),
                         );
 
+                    // A shadow (`@returnFragment`) resolver whose return type is an
+                    // INTERFACE/UNION with at least one `@weak` or non-Node
+                    // server-VALUE implementor. An abstract type has no
+                    // object id, so weak/value-ness is per-implementor — detected
+                    // here at the interface level. Like the concrete weak/value arms
+                    // it must reach the inline `Composite` arm (NOT `EdgeTo`) so
+                    // `build_ast` emits the backing-field `normalizationInfo` the
+                    // runtime needs to take the inline branch for the weak/value
+                    // members; strong Node implementors keep the pointer +
+                    // `@waterfall` refetch arm via the per-implementor dispatch in
+                    // `client_edges` / the reader. Weak-detection must NOT fire on
+                    // the interface return type itself (it has no instance field), so
+                    // `weak_object_instance_field` stays `None` here and `build_ast`
+                    // derives the per-implementor kind from the interface members.
+                    let is_shadow_abstract_inline_return =
+                        relay_schema::definitions::abstract_shadow_return_has_inline_implementor(
+                            self.program.schema.as_ref(),
+                            inner_type,
+                            self.id_field_name,
+                            resolver_info.return_fragment.is_some(),
+                        );
+
                     let output_type_info = if weak_object_instance_field.is_some() {
                         // Concrete `@weak` return: route to the inline arm,
                         // carrying the model-instance field so `build_ast` emits
@@ -273,6 +295,24 @@ impl<'program> RelayResolverFieldTransform<'program> {
                         // recognizes the server-value classification and emits a
                         // `ServerWeak` `normalizationInfo` so the runtime reads the
                         // transplanted record in place with NO second normalization.
+                        let normalization_operation = generate_name_for_nested_object_operation(
+                            self.project_name,
+                            &self.program.schema,
+                            self.program.schema.field(field.definition().item),
+                        );
+                        ResolverOutputTypeInfo::Composite(ResolverNormalizationInfo {
+                            inner_type,
+                            plural: schema_field.type_.is_list(),
+                            normalization_operation,
+                            weak_object_instance_field: None,
+                        })
+                    } else if is_shadow_abstract_inline_return {
+                        // Interface/union shadow return with a weak/value implementor:
+                        // route to the inline `Composite` arm. `inner_type` is the
+                        // abstract type (no object id), so `weak_object_instance_field`
+                        // stays `None`; `build_ast` derives the per-implementor
+                        // `normalizationInfo.kind` (WeakModel / ServerWeak) from the
+                        // interface members via `abstract_shadow_return_inline_kind`.
                         let normalization_operation = generate_name_for_nested_object_operation(
                             self.project_name,
                             &self.program.schema,

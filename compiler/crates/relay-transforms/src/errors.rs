@@ -336,6 +336,11 @@ pub enum ValidationMessage {
         "`@waterfall` on the plural shadow resolver field `{field_name}` is not currently supported. Remove `@waterfall` from this field."
     )]
     MagicFragmentPluralWaterfallUnsupported { field_name: StringKey },
+
+    #[error(
+        "A magic fragment returning interface `{interface_name}` that mixes inline (weak or non-Node value) implementors with refetchable server-object (Node) implementors is not yet supported. The inline arm reads in place while the server arm needs a `node(id:)` refetch, which requires per-`__typename` dispatch. Use an all-inline or all-server interface for now."
+    )]
+    MagicFragmentMixedInlineAndRefetchableUnsupported { interface_name: StringKey },
 }
 
 #[derive(

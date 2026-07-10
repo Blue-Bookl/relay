@@ -534,6 +534,29 @@ pub fn generate_relay_resolvers_operations_for_nested_objects(
                 continue;
             }
 
+            // An abstract interface/union shadow return with a server
+            // (Node or value) implementor alongside a weak/value inline member. The
+            // all-client "fat" normalization cannot be generated (a server member is
+            // not a client type, which `generate_fat_selections_from_type` rejects).
+            // The resolver returns the per-`__typename` identity (`{__typename,
+            // __id}`) instead, so no nested-object normalization operation is needed;
+            // skip it (the typegen site consults the same classifier). The
+            // all-`@weak` abstract return (no server member) is NOT skipped — it
+            // keeps its fat client normalization.
+            let abstract_shadow_return_has_server_implementor =
+                relay_schema::definitions::abstract_shadow_return_has_server_implementor(
+                    program.schema.as_ref(),
+                    inner_field_type,
+                    schema_config.node_interface_id_field,
+                    directive
+                        .arguments
+                        .named(*RETURN_FRAGMENT_ARGUMENT_NAME)
+                        .is_some(),
+                );
+            if abstract_shadow_return_has_server_implementor {
+                continue;
+            }
+
             let selections = match generate_fat_selections_from_type(
                 &program.schema,
                 schema_config,

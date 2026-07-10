@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<ce495b52774212a4826560198ee3a162>>
+ * @generated SignedSource<<4fa0284246e2d17615f4a165bec3297e>>
  */
 
 mod relay_compiler_integration;
@@ -972,6 +972,20 @@ async fn shadow_resolver_magic_fragment_mixed_interface() {
 }
 
 #[tokio::test]
+async fn shadow_resolver_magic_fragment_mixed_value_strong_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_mixed_value_strong.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_mixed_value_strong.invalid.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_mixed_value_strong.invalid.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_mixed_value_strong.invalid.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn shadow_resolver_magic_fragment_mixed_weak_strong_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_mixed_weak_strong.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_mixed_weak_strong.invalid.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_mixed_weak_strong.invalid.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_mixed_weak_strong.invalid.expected", input, expected).await;
+}
+
+#[tokio::test]
 async fn shadow_resolver_magic_fragment_mixed_with_waterfall() {
     let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_mixed_with_waterfall.input");
     let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_mixed_with_waterfall.expected");
@@ -1070,10 +1084,24 @@ async fn shadow_resolver_magic_fragment_union_return_invalid() {
 }
 
 #[tokio::test]
+async fn shadow_resolver_magic_fragment_value_interface() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_value_interface.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_value_interface.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_value_interface.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_value_interface.expected", input, expected).await;
+}
+
+#[tokio::test]
 async fn shadow_resolver_magic_fragment_waterfall() {
     let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_waterfall.input");
     let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_waterfall.expected");
     test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_waterfall.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_waterfall.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn shadow_resolver_magic_fragment_weak_client() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_client.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_client.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_weak_client.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_client.expected", input, expected).await;
 }
 
 #[tokio::test]
@@ -1088,6 +1116,27 @@ async fn shadow_resolver_magic_fragment_weak_concrete_waterfall_invalid() {
     let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_concrete_waterfall.invalid.input");
     let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_concrete_waterfall.invalid.expected");
     test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_weak_concrete_waterfall.invalid.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_concrete_waterfall.invalid.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn shadow_resolver_magic_fragment_weak_plural_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_plural.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_plural.invalid.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_weak_plural.invalid.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_plural.invalid.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn shadow_resolver_magic_fragment_weak_union_invalid() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_union.invalid.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_union.invalid.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_weak_union.invalid.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_union.invalid.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn shadow_resolver_magic_fragment_weak_value_interface() {
+    let input = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_value_interface.input");
+    let expected = include_str!("relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_value_interface.expected");
+    test_fixture(transform_fixture, file!(), "shadow_resolver_magic_fragment_weak_value_interface.input", "relay_compiler_integration/fixtures/shadow_resolver_magic_fragment_weak_value_interface.expected", input, expected).await;
 }
 
 #[tokio::test]
