@@ -1034,7 +1034,12 @@ input ProfilePictureOptions {
   newName: String
 }
 
-type User implements Named & Node & Actor & HasJsField & Entity & AllConcreteTypesImplementNode {
+type User implements Named &
+  Node &
+  Actor &
+  HasJsField &
+  Entity &
+  AllConcreteTypesImplementNode {
   actor: Actor
   actors: [Actor]
   actorCount: Int

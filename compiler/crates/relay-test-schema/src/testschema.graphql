@@ -989,7 +989,8 @@ type ImplementsImplementsUserNameRenderable implements ImplementsUserNameRendera
   name: String
 }
 
-type ImplementsImplementsUserNameRenderableAndUserNameRenderable implements ImplementsUserNameRenderable & UserNameRenderable {
+type ImplementsImplementsUserNameRenderableAndUserNameRenderable implements ImplementsUserNameRenderable &
+  UserNameRenderable {
   name: String
 }
 
@@ -997,7 +998,11 @@ input ProfilePictureOptions {
   newName: String
 }
 
-type User implements Named & Node & Actor & HasJsField & AllConcreteTypesImplementNode {
+type User implements Named &
+  Node &
+  Actor &
+  HasJsField &
+  AllConcreteTypesImplementNode {
   actor: Actor
   actors: [Actor]
   actorCount: Int

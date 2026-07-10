@@ -791,11 +791,10 @@ fn input_value_definition_doc(
                 // Check if the line with " = []" would exceed LINE_WIDTH
                 // current_pos + " = ".len() + "[]".len() = current_pos + 5
                 if current_pos + 5 > LINE_WIDTH {
-                    // Expand empty list to [\n\n] with proper indent
+                    // Expand empty list to [\n] with proper indent
                     let indent_str = " ".repeat(base_indent);
                     doc = doc
                         .append(RcDoc::text("["))
-                        .append(RcDoc::hardline())
                         .append(RcDoc::hardline())
                         .append(RcDoc::text(indent_str))
                         .append(RcDoc::text("]"));
