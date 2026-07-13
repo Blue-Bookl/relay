@@ -23,10 +23,7 @@ hook useIsParentQueryActive<
     readonly $fragmentSpreads: FragmentType,
     ...
   },
->(
-  fragmentInput: GraphQLTaggedNode,
-  fragmentRef: TKey,
-): boolean {
+>(fragmentInput: GraphQLTaggedNode, fragmentRef: TKey): boolean {
   const fragmentNode = getFragment(fragmentInput);
   useStaticFragmentNodeWarning(
     fragmentNode,

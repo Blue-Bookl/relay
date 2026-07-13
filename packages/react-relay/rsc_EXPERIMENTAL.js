@@ -42,9 +42,8 @@ export type ServerEnvironment = {
   ) => PreloadedQueryRef<TVariables, TData>,
   readonly serverReadFragment: <TFragmentType extends FragmentType, TData>(
     fragment: Fragment<TFragmentType, TData>,
-    fragmentRef:
-      | HasSpread<TFragmentType>
-      | ReadonlyArray<HasSpread<TFragmentType>>,
+    fragmentRef: | HasSpread<TFragmentType>
+    | ReadonlyArray<HasSpread<TFragmentType>>,
   ) => Promise<TData>,
 };
 
@@ -73,8 +72,7 @@ function createServerEnvironment(
   async function serverReadFragment<TFragmentType extends FragmentType, TData>(
     fragment: Fragment<TFragmentType, TData>,
     fragmentRef:
-      | HasSpread<TFragmentType>
-      | ReadonlyArray<HasSpread<TFragmentType>>,
+      HasSpread<TFragmentType> | ReadonlyArray<HasSpread<TFragmentType>>,
   ): Promise<TData> {
     return serverReadFragmentImpl(getEnvironment(), fragment, fragmentRef);
   }

@@ -36,8 +36,7 @@ export type ConcreteUpdatableQuery = {
 };
 
 export type NormalizationRootNode =
-  | ConcreteRequest
-  | NormalizationSplitOperation;
+  ConcreteRequest | NormalizationSplitOperation;
 
 export type ProvidedVariableType = {get(): unknown};
 

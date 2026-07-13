@@ -125,9 +125,8 @@ type MockFunctions = {
   ) => void,
   readonly getMostRecentOperation: () => OperationDescriptor,
   readonly resolveMostRecentOperation: (
-    payload:
-      | GraphQLSingularResponse
-      | ((operation: OperationDescriptor) => GraphQLSingularResponse),
+    payload: | GraphQLSingularResponse
+    | ((operation: OperationDescriptor) => GraphQLSingularResponse),
   ) => void,
   readonly rejectMostRecentOperation: (
     error: Error | ((operation: OperationDescriptor) => Error),
@@ -458,8 +457,9 @@ function createMockEnvironment(
 
   const createExecuteProxy = (
     env: IEnvironment,
-    fn: // $FlowFixMe[method-unbinding] added when improving typing for this parameters
-    | IEnvironment['execute']
+    fn:
+      // $FlowFixMe[method-unbinding] added when improving typing for this parameters
+      | IEnvironment['execute']
       // $FlowFixMe[method-unbinding] added when improving typing for this parameters
       | IEnvironment['executeSubscription']
       // $FlowFixMe[method-unbinding] added when improving typing for this parameters

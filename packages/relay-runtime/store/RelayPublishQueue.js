@@ -41,9 +41,7 @@ const invariant = require('invariant');
 const warning = require('warning');
 
 type PendingCommit<TMutation extends MutationParameters> =
-  | PendingRelayPayload<TMutation>
-  | PendingRecordSource
-  | PendingUpdater;
+  PendingRelayPayload<TMutation> | PendingRecordSource | PendingUpdater;
 type PendingRelayPayload<TMutation extends MutationParameters> = {
   readonly kind: 'payload',
   readonly operation: OperationDescriptor,

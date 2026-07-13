@@ -77,9 +77,7 @@ export type CacheConfig = {
 
 export type FetchQueryFetchPolicy = 'store-or-network' | 'network-only';
 export type FetchPolicy =
-  | FetchQueryFetchPolicy
-  | 'store-and-network'
-  | 'store-only';
+  FetchQueryFetchPolicy | 'store-and-network' | 'store-only';
 export type RenderPolicy = 'full' | 'partial';
 
 /* eslint-disable no-undef */

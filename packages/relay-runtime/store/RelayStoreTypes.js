@@ -92,9 +92,7 @@ export type PluralReaderSelector = {
 };
 
 export type FieldErrorType =
-  | 'MISSING_DATA'
-  | 'MISSING_REQUIRED'
-  | 'PAYLOAD_ERROR';
+  'MISSING_DATA' | 'MISSING_REQUIRED' | 'PAYLOAD_ERROR';
 
 export type RequestDescriptor = {
   readonly identifier: RequestIdentifier,
@@ -1293,8 +1291,7 @@ export type SelectorStoreUpdater<in TMutationResponse> = (
  * store.
  */
 export type OptimisticUpdate<TMutation extends MutationParameters> =
-  | OptimisticUpdateFunction
-  | OptimisticUpdateRelayPayload<TMutation>;
+  OptimisticUpdateFunction | OptimisticUpdateRelayPayload<TMutation>;
 
 export type OptimisticUpdateFunction = {
   readonly storeUpdater: StoreUpdater,

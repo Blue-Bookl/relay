@@ -42,8 +42,7 @@ export type NormalizationOperation = {
 };
 
 export type NormalizationHandle =
-  | NormalizationScalarHandle
-  | NormalizationLinkedHandle;
+  NormalizationScalarHandle | NormalizationLinkedHandle;
 
 export type NormalizationLinkedHandle = {
   readonly kind: 'LinkedHandle',
@@ -131,9 +130,7 @@ export type NormalizationModuleImport = {
   readonly fragmentPropName: string,
   readonly fragmentName: string,
   readonly componentModuleProvider?: () =>
-    | unknown
-    | Promise<unknown>
-    | JSResourceReference<unknown>,
+    unknown | Promise<unknown> | JSResourceReference<unknown>,
   readonly operationModuleProvider?: () =>
     | NormalizationRootNode
     | Promise<NormalizationRootNode>
@@ -222,8 +219,7 @@ export type NormalizationClientEdgeToClientObject = {
   readonly kind: 'ClientEdgeToClientObject',
   readonly linkedField: NormalizationLinkedField,
   readonly backingField:
-    | NormalizationResolverField
-    | NormalizationLiveResolverField,
+    NormalizationResolverField | NormalizationLiveResolverField,
   readonly modelResolvers?: NormalizationModelResolvers | null,
 };
 
@@ -231,8 +227,7 @@ export type NormalizationClientEdgeToServerObject = {
   readonly kind: 'ClientEdgeToServerObject',
   readonly linkedField: NormalizationLinkedField,
   readonly backingField:
-    | NormalizationResolverField
-    | NormalizationLiveResolverField,
+    NormalizationResolverField | NormalizationLiveResolverField,
   readonly operation: ConcreteRequest,
 };
 
@@ -306,5 +301,4 @@ export type NormalizationSelectableNode =
   | NormalizationStream;
 
 export type NormalizationRootNode =
-  | ConcreteRequest
-  | NormalizationSplitOperation;
+  ConcreteRequest | NormalizationSplitOperation;

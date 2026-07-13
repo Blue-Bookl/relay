@@ -176,9 +176,7 @@ export type ReaderModuleImport = {
   readonly fragmentPropName: string,
   readonly fragmentName: string,
   readonly componentModuleProvider?: () =>
-    | unknown
-    | Promise<unknown>
-    | JSResourceReference<unknown>,
+    unknown | Promise<unknown> | JSResourceReference<unknown>,
 };
 
 export type ReaderListValueArgument = {
@@ -207,10 +205,7 @@ export type ReaderObjectValueArgument = {
 };
 
 export type ReaderNode =
-  | ReaderCondition
-  | ReaderLinkedField
-  | ReaderFragment
-  | ReaderInlineFragment;
+  ReaderCondition | ReaderLinkedField | ReaderFragment | ReaderInlineFragment;
 
 export type ReaderScalarField = {
   readonly kind: 'ScalarField',
@@ -245,9 +240,7 @@ export type CatchFieldTo = 'RESULT' | 'NULL';
 export type ReaderCatchField = {
   readonly kind: 'CatchField',
   readonly field:
-    | ReaderField
-    | ReaderClientEdge
-    | ReaderAliasedInlineFragmentSpread,
+    ReaderField | ReaderClientEdge | ReaderAliasedInlineFragmentSpread,
   readonly to: CatchFieldTo,
   // TODO: This field is not used any more, we should be able to remove it.
   readonly path?: unknown,
@@ -339,9 +332,7 @@ export type ReaderClientEdgeToClientObject = {
   readonly serverObjectOperations?: {[string]: ConcreteRequest} | null,
   readonly linkedField: ReaderLinkedField,
   readonly backingField:
-    | ReaderRelayResolver
-    | ReaderRelayLiveResolver
-    | ReaderClientExtension,
+    ReaderRelayResolver | ReaderRelayLiveResolver | ReaderClientExtension,
 };
 
 export type ReaderClientEdgeToServerObject = {
@@ -349,14 +340,11 @@ export type ReaderClientEdgeToServerObject = {
   readonly linkedField: ReaderLinkedField,
   readonly operation: ConcreteRequest,
   readonly backingField:
-    | ReaderRelayResolver
-    | ReaderRelayLiveResolver
-    | ReaderClientExtension,
+    ReaderRelayResolver | ReaderRelayLiveResolver | ReaderClientExtension,
 };
 
 export type ReaderClientEdge =
-  | ReaderClientEdgeToClientObject
-  | ReaderClientEdgeToServerObject;
+  ReaderClientEdgeToClientObject | ReaderClientEdgeToServerObject;
 
 export type ReaderSelection =
   | ReaderCondition

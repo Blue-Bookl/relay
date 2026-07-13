@@ -29,9 +29,7 @@ import type {
 export type VariablesOf<T> = _VariablesOf<T>;
 
 export type PreloadFetchPolicy =
-  | 'store-or-network'
-  | 'store-and-network'
-  | 'network-only';
+  'store-or-network' | 'store-and-network' | 'network-only';
 
 export type PreloadOptions = {
   readonly fetchKey?: string | number,
