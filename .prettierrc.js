@@ -8,6 +8,11 @@
  * @oncall relay
  */
 
+let plugins = ['prettier-plugin-hermes-parser'];
+try {
+  plugins = require('./.prettier-plugins.fb.js');
+} catch {}
+
 module.exports = {
   arrowParens: 'avoid',
   bracketSameLine: true,
@@ -15,5 +20,6 @@ module.exports = {
   requirePragma: true,
   singleQuote: true,
   trailingComma: 'all',
-  parser: 'flow',
+  parser: 'hermes',
+  plugins,
 };
