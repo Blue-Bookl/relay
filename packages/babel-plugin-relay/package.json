@@ -23,8 +23,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "prettier": "3.9.4",
-    "prettier-plugin-hermes-parser": "0.37.0"
+    "prettier": "3.9.4"
   },
   "resolutions": {
     "@babel/traverse": "^7.23.2"
