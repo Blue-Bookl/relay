@@ -1664,7 +1664,23 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
         if field.arguments.is_empty() {
             Primitive::SkippableNull
         } else {
-            self.build_arguments(&relay_resolver_metadata.field_arguments)
+            // For shadow resolvers (magic fragments), the consumer's field arguments that
+            // match the root fragment's @argumentDefinitions (e.g. `ids`) are partitioned
+            // into fragment_arguments to parameterize the root-fragment spread. Those same
+            // values must also reach the resolver function at read time, so include both
+            // buckets — mirroring the normalization path. Non-shadow resolvers continue to
+            // receive field_arguments only.
+            let read_time_arguments: Vec<&Argument> =
+                if relay_resolver_metadata.return_fragment.is_some() {
+                    relay_resolver_metadata
+                        .field_arguments
+                        .iter()
+                        .chain(relay_resolver_metadata.fragment_arguments.iter())
+                        .collect()
+                } else {
+                    relay_resolver_metadata.field_arguments.iter().collect()
+                };
+            self.build_arguments_from_refs(read_time_arguments)
                 .map_or_else(
                     || {
                         // Passing an empty array here, rather than `null`, allows the runtime
@@ -2552,7 +2568,10 @@ impl<'schema, 'builder, 'config> CodegenBuilder<'schema, 'builder, 'config> {
     }
 
     fn build_arguments(&mut self, arguments: &[Argument]) -> Option<AstKey> {
-        let mut sorted_args: Vec<&Argument> = arguments.iter().collect();
+        self.build_arguments_from_refs(arguments.iter().collect())
+    }
+
+    fn build_arguments_from_refs(&mut self, mut sorted_args: Vec<&Argument>) -> Option<AstKey> {
         sorted_args.sort_unstable_by_key(|arg| arg.name.item);
 
         let args = sorted_args
