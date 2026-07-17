@@ -777,6 +777,15 @@ fn apply_typegen_transforms(
         remove_base_fragments(&program, &base_fragment_names)
     });
 
+    program = log_event.time("generate_typename_union", || {
+        generate_typename_union(
+            &program,
+            &project_config
+                .feature_flags
+                .enable_typename_discriminated_unions,
+        )
+    });
+
     program = apply_after_custom_transforms(
         &program,
         custom_transforms,
