@@ -159,22 +159,31 @@ impl SchemaSet {
         Ok(used_schema)
     }
 
-    pub fn from_base_schema_documents(
-        schema_documents: &[SchemaDocument],
-    ) -> DiagnosticsResult<Self> {
+    pub fn from_base_schema_documents<'a, I>(schema_documents: I) -> DiagnosticsResult<Self>
+    where
+        I: IntoIterator<Item = &'a SchemaDocument>,
+    {
         Self::from_schema_documents_with_extensions(schema_documents, &[])
     }
 
-    pub fn from_schema_documents_with_extensions(
-        schema_documents: &[SchemaDocument],
-        extension_documents: &[SchemaDocument],
-    ) -> DiagnosticsResult<Self> {
+    pub fn from_schema_documents_with_extensions<'a, 'b, BI, EI>(
+        schema_documents: BI,
+        extension_documents: EI,
+    ) -> DiagnosticsResult<Self>
+    where
+        BI: IntoIterator<Item = &'a SchemaDocument>,
+        EI: IntoIterator<Item = &'b SchemaDocument>,
+    {
         let mut used_schema = SchemaSet::new();
         try_all(
             schema_documents
-                .iter()
+                .into_iter()
                 .map(|document| (document, false))
-                .chain(extension_documents.iter().map(|document| (document, true)))
+                .chain(
+                    extension_documents
+                        .into_iter()
+                        .map(|document| (document, true)),
+                )
                 .map(|(document, is_ext)| used_schema.merge_sdl_document(document, is_ext)),
         )?;
         Ok(used_schema)
