@@ -685,17 +685,25 @@ class Executor<TMutation extends MutationParameters> {
         );
         payloadFollowups.push(payload);
         this._execTimeResolverResponseComplete = isFinal;
-        if (isFinal) {
-          // Need to update the active state to mark the query as inactive,
-          // incase server payloads have completed
-          if (this._isClientQuery) {
-            // If it is a client query, there is no server response to set the
-            // final state, so we need to set it here
-            this._state = 'loading_final';
-          }
-          this._updateActiveState();
+        if (isFinal && this._isClientQuery) {
+          // If it is a client query, there is no server response to set the
+          // final state, so we need to set it here
+          this._state = 'loading_final';
         }
       }
+      // Refresh the request-active cache after each batch of normalized
+      // payloads. Without this, when an @exec_time_resolvers query has
+      // already settled (is_final: true) and a @live resolver later
+      // re-publishes with is_final: false, _execTimeResolverResponseComplete
+      // flips back to false but _operationExecutions stays stuck on
+      // 'inactive' → isRequestActive returns false → late-mount useFragment
+      // with @throwOnFieldError throws on transiently-missing fields.
+      //
+      // One call per batch (rather than per iteration) is sufficient because
+      // _state and _execTimeResolverResponseComplete are last-write-wins
+      // across iterations, commitPayload only queues to the publish queue,
+      // and no consumer reads the cache between iterations.
+      this._updateActiveState();
     }
 
     if (incrementalResponses.length > 0) {
